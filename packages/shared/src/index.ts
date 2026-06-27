@@ -235,6 +235,7 @@ export interface GuestAuthResponse {
 export type ClientToServerEvents = {
   "room.ready": (payload: { ready: boolean }) => void;
   "room.addBot": (payload: { seatIndex: number }) => void;
+  "room.clearSeat": (payload: { seatIndex: number }) => void;
   "room.leave": () => void;
   "game.discard": (payload: { tileId: string }) => void;
   "game.claim": (payload: { type: "chow" | "pong" | "kong" | "win" | "pass"; tileIds?: string[] }) => void;
