@@ -291,6 +291,19 @@ io.on("connection", (socket) => {
     });
   });
 
+  socket.on("room.clearSeat", async ({ seatIndex }) => {
+    await handleSocketAction(socket, async () => {
+      const currentRoom = requireRoom(socket.data.roomCode);
+      const clearedPlayerId = currentRoom.seats[seatIndex]?.playerId;
+      clearSeatInRoom(currentRoom, socket.data.playerId, seatIndex);
+      if (clearedPlayerId) {
+        detachPlayerSockets(currentRoom, clearedPlayerId, "座位已由房主釋出。");
+      }
+      await persist(currentRoom.code, "room.seatCleared", { seatIndex, clearedPlayerId });
+      broadcastRoom(currentRoom);
+    });
+  });
+
   socket.on("room.leave", async () => {
     await handleSocketAction(socket, async () => {
       const currentRoom = requireRoom(socket.data.roomCode);
@@ -466,6 +479,42 @@ function addBotToRoom(room: Room, requesterPlayerId: string, seatIndex: number):
   seat.coins = room.mode === "riichi" ? 25000 : DEFAULT_GAME_CONFIG.initialCoins;
   room.updatedAt = Date.now();
   return seat;
+}
+
+function clearSeatInRoom(room: Room, requesterPlayerId: string, seatIndex: number): PlayerSeat {
+  if (requesterPlayerId !== room.hostPlayerId) {
+    throw new Error("只有房主可以換人。");
+  }
+  if (room.game && room.game.phase !== "settled" && room.game.phase !== "draw") {
+    throw new Error("只能在未開局或局末換人。");
+  }
+  const seat = room.seats[seatIndex];
+  if (!seat) {
+    throw new Error("Seat not found.");
+  }
+  if (seat.playerId === room.hostPlayerId) {
+    throw new Error("房主座位不能由換人功能釋出。");
+  }
+
+  delete seat.playerId;
+  delete seat.name;
+  delete seat.isBot;
+  seat.ready = false;
+  seat.connected = false;
+  seat.coins = room.mode === "riichi" ? 25000 : DEFAULT_GAME_CONFIG.initialCoins;
+  room.updatedAt = Date.now();
+  return seat;
+}
+
+function detachPlayerSockets(room: Room, playerId: string, message: string): void {
+  for (const client of io.sockets.sockets.values()) {
+    if (client.data.roomCode !== room.code || client.data.playerId !== playerId) {
+      continue;
+    }
+    client.emit("game.error", { message });
+    client.leave(room.code);
+    client.disconnect(true);
+  }
 }
 
 function maybeStartHand(room: Room): void {
