@@ -41,8 +41,27 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           TARGET_REF: ${{ github.ref_name }}
         run: |
-          ssh -i ~/.ssh/oracle_deploy_key -o StrictHostKeyChecking=yes "$DEPLOY_USER@$DEPLOY_HOST" \
-            "APP_DIR='$APP_DIR' IMAGE_REF='$IMAGE_REF' REPOSITORY='$REPOSITORY' TARGET_REF='$TARGET_REF' bash -se" <<'REMOTE'
+          if [ -z "$DEPLOY_HOST" ]; then
+            echo "ORACLE_DEPLOY_HOST secret is empty."
+            exit 1
+          fi
+
+          if [ -z "$DEPLOY_USER" ]; then
+            echo "ORACLE_DEPLOY_USER secret is empty."
+            exit 1
+          fi
+
+          remote="${DEPLOY_USER}@${DEPLOY_HOST}"
+          ssh_args=(
+            -i "$HOME/.ssh/oracle_deploy_key"
+            -o BatchMode=yes
+            -o IdentitiesOnly=yes
+            -o StrictHostKeyChecking=yes
+          )
+
+          echo "Deploying to ${DEPLOY_USER}@${DEPLOY_HOST}"
+
+          ssh "${ssh_args[@]}" "$remote" env APP_DIR="$APP_DIR" IMAGE_REF="$IMAGE_REF" REPOSITORY="$REPOSITORY" TARGET_REF="$TARGET_REF" bash -se <<'REMOTE'
           set -euo pipefail
 
           if ! command -v docker >/dev/null 2>&1; then
