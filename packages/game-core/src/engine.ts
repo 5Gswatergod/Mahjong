@@ -4,6 +4,7 @@ import {
   type ClaimWindow,
   type GameConfig,
   type GameState,
+  type GameMode,
   type LegalAction,
   type Meld,
   type PlayerSeat,
@@ -12,18 +13,19 @@ import {
   type Tile,
   type WinContext,
   type Wind,
-  type WinMode,
   winds
 } from "@taiwan-mahjong/shared";
 import { canWin, canWinWithTile, getWinningTiles, isTing, possibleChows } from "./hand.js";
 import { calculateScore, type ScoringPlayer, type ScoringTable } from "./scoring.js";
-import { buildWall, nextSeat, sameTileType, seatDistance, shuffleTiles, sortTiles, tileKey } from "./tiles.js";
+import { canRiichiWin, calculateRiichiScore, getRiichiWinningTiles, riichiShanten } from "./riichi.js";
+import { allPlayableTileKeys, buildWall, createTileFromKey, nextSeat, sameTileType, seatDistance, shuffleTiles, sortTiles, tileKey } from "./tiles.js";
 
 export interface CorePlayer {
   seatIndex: number;
   wind: Wind;
   playerId?: string;
   name?: string;
+  isBot?: boolean;
   coins: number;
   ready: boolean;
   connected: boolean;
@@ -32,15 +34,18 @@ export interface CorePlayer {
   melds: Meld[];
   discards: Tile[];
   declaredTing: boolean;
+  declaredRiichi: boolean;
   declaredEarthTing: boolean;
   firstDiscardMade: boolean;
   firstDrawMade: boolean;
   drawnTileId?: string;
+  ronBlockedTileKeys: string[];
 }
 
 export interface CoreGame {
   id: string;
   handId: string;
+  mode: GameMode;
   phase: GameState["phase"];
   config: GameConfig;
   dealerSeat: number;
@@ -49,6 +54,13 @@ export interface CoreGame {
   dealerStreak: number;
   wall: Tile[];
   players: CorePlayer[];
+  riichi?: {
+    roundIndex: number;
+    honba: number;
+    riichiSticks: number;
+    doraIndicators: Tile[];
+    uraDoraIndicators: Tile[];
+  };
   lastDiscard?: {
     seatIndex: number;
     tile: Tile;
@@ -69,57 +81,82 @@ export interface CoreGame {
 export interface CreateGameOptions {
   id?: string;
   handId?: string;
+  mode?: GameMode;
   config?: Partial<GameConfig>;
   dealerSeat?: number;
   roundWind?: Wind;
+  roundIndex?: number;
   dealerStreak?: number;
   random?: () => number;
 }
 
 export function createGame(seats: PlayerSeat[], options: CreateGameOptions = {}): CoreGame {
+  const mode = options.mode ?? "taiwan";
   const dealerSeat = options.dealerSeat ?? 0;
   const startedAt = Date.now();
-  const players: CorePlayer[] = seats.map((seat) => ({
-    seatIndex: seat.seatIndex,
-    wind: winds[(seat.seatIndex - dealerSeat + 4) % 4]!,
-    ...(seat.playerId ? { playerId: seat.playerId } : {}),
-    ...(seat.name ? { name: seat.name } : {}),
-    coins: seat.coins,
-    ready: seat.ready,
-    connected: seat.connected,
-    hand: [],
-    flowers: [],
-    melds: [],
-    discards: [],
-    declaredTing: false,
-    declaredEarthTing: false,
-    firstDiscardMade: false,
-    firstDrawMade: false
-  }));
+  const players: CorePlayer[] = seats.map((seat) => {
+    const coins = mode === "riichi" && seat.coins === DEFAULT_GAME_CONFIG.initialCoins ? 25000 : seat.coins;
+    return {
+      seatIndex: seat.seatIndex,
+      wind: winds[(seat.seatIndex - dealerSeat + 4) % 4]!,
+      ...(seat.playerId ? { playerId: seat.playerId } : {}),
+      ...(seat.name ? { name: seat.name } : {}),
+      ...(seat.isBot ? { isBot: true } : {}),
+      coins,
+      ready: seat.ready,
+      connected: seat.connected,
+      hand: [],
+      flowers: [],
+      melds: [],
+      discards: [],
+      declaredTing: false,
+      declaredRiichi: false,
+      declaredEarthTing: false,
+      firstDiscardMade: false,
+      firstDrawMade: false,
+      ronBlockedTileKeys: []
+    };
+  });
 
   const game: CoreGame = {
     id: options.id ?? createId("game"),
     handId: options.handId ?? createId("hand"),
+    mode,
     phase: "playing",
     config: { ...DEFAULT_GAME_CONFIG, ...options.config },
     dealerSeat,
     currentSeat: dealerSeat,
     roundWind: options.roundWind ?? "east",
     dealerStreak: options.dealerStreak ?? 0,
-    wall: shuffleTiles(buildWall(), options.random),
+    wall: shuffleTiles(buildWall(mode), options.random),
     players,
     firstClaimOrMeldHappened: false,
     startedAt,
     updatedAt: startedAt
   };
 
+  if (mode === "riichi") {
+    const dora = game.wall.at(-5) ?? game.wall.at(-1);
+    if (dora) {
+      game.riichi = {
+        roundIndex: options.roundIndex ?? 0,
+        honba: options.dealerStreak ?? 0,
+        riichiSticks: 0,
+        doraIndicators: [dora],
+        uraDoraIndicators: game.wall.slice(-10, -5)
+      };
+    }
+  }
+
   for (const player of game.players) {
-    const targetCount = player.seatIndex === dealerSeat ? 17 : 16;
+    const targetCount = mode === "riichi" ? (player.seatIndex === dealerSeat ? 14 : 13) : player.seatIndex === dealerSeat ? 17 : 16;
     drawUntilNonFlowerCount(game, player, targetCount, true);
     player.hand = sortTiles(player.hand);
   }
 
-  resolveImmediateFlowerWin(game, true);
+  if (mode === "taiwan") {
+    resolveImmediateFlowerWin(game, true);
+  }
   touch(game);
   return game;
 }
@@ -128,6 +165,7 @@ export function toPublicGameState(game: CoreGame): GameState {
   return {
     id: game.id,
     handId: game.handId,
+    mode: game.mode,
     phase: game.phase,
     config: game.config,
     dealerSeat: game.dealerSeat,
@@ -135,7 +173,7 @@ export function toPublicGameState(game: CoreGame): GameState {
     roundWind: game.roundWind,
     dealerStreak: game.dealerStreak,
     wallCount: game.wall.length,
-    deadWallCount: Math.min(16, game.wall.length),
+    deadWallCount: Math.min(deadWallLimit(game), game.wall.length),
     ...(game.lastDiscard
       ? { lastDiscard: { seatIndex: game.lastDiscard.seatIndex, tile: game.lastDiscard.tile } }
       : {}),
@@ -145,6 +183,7 @@ export function toPublicGameState(game: CoreGame): GameState {
       wind: player.wind,
       ...(player.playerId ? { playerId: player.playerId } : {}),
       ...(player.name ? { name: player.name } : {}),
+      ...(player.isBot ? { isBot: true } : {}),
       coins: player.coins,
       ready: player.ready,
       connected: player.connected,
@@ -152,8 +191,20 @@ export function toPublicGameState(game: CoreGame): GameState {
       flowerTiles: player.flowers,
       melds: publicMelds(player.melds),
       discards: player.discards,
-      declaredTing: player.declaredTing
+      declaredTing: player.declaredTing,
+      ...(player.declaredRiichi ? { declaredRiichi: true } : {})
     })),
+    ...(game.riichi
+      ? {
+          riichi: {
+            roundIndex: game.riichi.roundIndex,
+            honba: game.riichi.honba,
+            riichiSticks: game.riichi.riichiSticks,
+            doraIndicators: game.riichi.doraIndicators,
+            ...(game.phase === "settled" ? { uraDoraIndicators: game.riichi.uraDoraIndicators } : {})
+          }
+        }
+      : {}),
     ...(game.settlement ? { settlement: game.settlement } : {}),
     startedAt: game.startedAt,
     updatedAt: game.updatedAt
@@ -162,11 +213,16 @@ export function toPublicGameState(game: CoreGame): GameState {
 
 export function getPrivateState(game: CoreGame, seatIndex: number): PrivatePlayerState {
   const player = getPlayer(game, seatIndex);
+  const rawDrawnId = player.drawnTileId?.replace("supplement:", "");
+  const tingHints = getTingHints(game, player);
   return {
     seatIndex,
-    hand: sortTiles(player.hand),
+    hand: orderPrivateHand(player.hand, rawDrawnId),
     legalActions: getLegalActions(game, seatIndex),
-    winningTiles: getWinningTilesForPlayer(game, seatIndex)
+    winningTiles: getWinningTilesForPlayer(game, seatIndex),
+    ...(rawDrawnId ? { drawnTileId: rawDrawnId } : {}),
+    tingDiscardIds: tingHints.map((hint) => hint.discardTile.id),
+    tingHints
   };
 }
 
@@ -186,7 +242,7 @@ export function getLegalActions(game: CoreGame, seatIndex: number): LegalAction[
   const player = getPlayer(game, seatIndex);
   const actions: LegalAction[] = [];
 
-  if (canWin(player.hand, player.melds)) {
+  if (canPlayerWin(game, player)) {
     actions.push({ type: "win", description: "自摸" });
   }
 
@@ -194,8 +250,8 @@ export function getLegalActions(game: CoreGame, seatIndex: number): LegalAction[
     actions.push({ type: "discard", tileId: tile.id, description: `打出 ${tile.label}` });
   }
 
-  if (!player.declaredTing && canDeclareTing(player)) {
-    actions.push({ type: "declareTing", description: "宣告聽牌" });
+  if (game.mode === "riichi" && !player.declaredRiichi && canDeclareRiichi(player)) {
+    actions.push({ type: "declareRiichi", description: "立直" });
   }
 
   for (const tileIds of getCurrentPlayerKongOptions(player)) {
@@ -213,6 +269,9 @@ export function applyDiscard(game: CoreGame, seatIndex: number, tileId: string):
   if (player.declaredTing && rawDrawnId && tile.id !== rawDrawnId) {
     player.hand.push(tile);
     throw new Error("宣告聽牌後只能打出新摸進的牌。");
+  }
+  if (game.mode === "taiwan" && !isRonBlocked(player, tile)) {
+    clearRonBlocks(player);
   }
 
   delete player.drawnTileId;
@@ -310,7 +369,7 @@ export function applyClaim(
 export function applySelfDrawWin(game: CoreGame, seatIndex: number): void {
   assertPlayingTurn(game, seatIndex);
   const player = getPlayer(game, seatIndex);
-  if (!canWin(player.hand, player.melds)) {
+  if (!canPlayerWin(game, player)) {
     throw new Error("目前手牌尚未胡牌。");
   }
   const rawDrawnId = player.drawnTileId?.replace("supplement:", "");
@@ -320,7 +379,7 @@ export function applySelfDrawWin(game: CoreGame, seatIndex: number): void {
     winMode: "selfDraw",
     ...(winningTile ? { winningTile } : {}),
     isAfterKong: Boolean(player.drawnTileId?.startsWith("supplement:")),
-    isLastTile: game.wall.length <= 16,
+    isLastTile: game.wall.length <= deadWallLimit(game),
     isInitialWin: seatIndex === game.dealerSeat && !player.firstDiscardMade && !player.firstDrawMade,
     isFirstDrawWin: seatIndex !== game.dealerSeat && player.firstDrawMade && !player.firstDiscardMade
   });
@@ -337,6 +396,9 @@ export function applyKong(game: CoreGame, seatIndex: number, tileIds: string[], 
     }
     const baseTile = meld.tiles[0]!;
     const tile = removeTilesByType(player.hand, baseTile, 1)[0]!;
+    if (game.mode === "taiwan" && !isRonBlocked(player, tile)) {
+      clearRonBlocks(player);
+    }
     const robOptions = buildRobKongOptions(game, tile, seatIndex);
     if (robOptions.length > 0) {
       game.phase = "claiming";
@@ -375,6 +437,9 @@ export function applyKong(game: CoreGame, seatIndex: number, tileIds: string[], 
 
 export function applyDeclareTing(game: CoreGame, seatIndex: number): void {
   assertPlayingTurn(game, seatIndex);
+  if (game.mode !== "taiwan") {
+    throw new Error("只有台灣麻將可以宣告聽牌。");
+  }
   const player = getPlayer(game, seatIndex);
   if (player.declaredTing) {
     return;
@@ -386,6 +451,30 @@ export function applyDeclareTing(game: CoreGame, seatIndex: number): void {
   const noOneHasClaimed = !game.firstClaimOrMeldHappened && game.players.every((candidate) => candidate.melds.length === 0);
   if (noOneHasClaimed && !player.firstDiscardMade && player.melds.length === 0) {
     player.declaredEarthTing = true;
+  }
+  touch(game);
+}
+
+export function applyDeclareRiichi(game: CoreGame, seatIndex: number): void {
+  assertPlayingTurn(game, seatIndex);
+  if (game.mode !== "riichi") {
+    throw new Error("只有日式麻將可以立直。");
+  }
+  const player = getPlayer(game, seatIndex);
+  if (player.declaredRiichi) {
+    return;
+  }
+  if (!canDeclareRiichi(player)) {
+    throw new Error("目前尚未聽牌，不能立直。");
+  }
+  if (player.coins < 1000) {
+    throw new Error("點棒不足，不能立直。");
+  }
+  player.declaredRiichi = true;
+  player.declaredTing = true;
+  player.coins -= 1000;
+  if (game.riichi) {
+    game.riichi.riichiSticks += 1;
   }
   touch(game);
 }
@@ -423,16 +512,16 @@ function buildClaimOptions(game: CoreGame, discard: Tile, fromSeat: number): Cla
       continue;
     }
     const actions: LegalAction[] = [];
-    if (canWinWithTile(player.hand, discard, player.melds)) {
+    if (canPlayerWinWithTile(game, player, discard)) {
       actions.push({ type: "win", fromSeat, tileId: discard.id, description: `胡 ${discard.label}` });
     }
-    if (countSameType(player.hand, discard) >= 3) {
+    if (!player.declaredRiichi && countSameType(player.hand, discard) >= 3) {
       actions.push({ type: "kong", fromSeat, tileId: discard.id, description: `槓 ${discard.label}` });
     }
-    if (countSameType(player.hand, discard) >= 2) {
+    if (!player.declaredRiichi && countSameType(player.hand, discard) >= 2) {
       actions.push({ type: "pong", fromSeat, tileId: discard.id, description: `碰 ${discard.label}` });
     }
-    if (player.seatIndex === nextSeat(fromSeat)) {
+    if (!player.declaredRiichi && player.seatIndex === nextSeat(fromSeat)) {
       for (const chow of possibleChows(player.hand, discard)) {
         actions.push({
           type: "chow",
@@ -454,7 +543,7 @@ function buildClaimOptions(game: CoreGame, discard: Tile, fromSeat: number): Cla
 
 function buildRobKongOptions(game: CoreGame, tile: Tile, fromSeat: number): ClaimOption[] {
   return game.players
-    .filter((player) => player.seatIndex !== fromSeat && canWinWithTile(player.hand, tile, player.melds))
+    .filter((player) => player.seatIndex !== fromSeat && canPlayerWinWithTile(game, player, tile))
     .map((player) => ({
       seatIndex: player.seatIndex,
       actions: [
@@ -483,6 +572,8 @@ function finishClaimWindowIfAllPassed(game: CoreGame): void {
   if (!allPassed) {
     return;
   }
+
+  applyPassedWinBlocks(game);
 
   if (game.pendingRobKong) {
     const player = getPlayer(game, game.pendingRobKong.fromSeat);
@@ -534,9 +625,8 @@ function claimPriority(type: LegalAction["type"]): number {
 function advanceTurnAndDraw(game: CoreGame, seatIndex: number): void {
   game.currentSeat = seatIndex;
   game.phase = "playing";
-  if (game.wall.length <= 16) {
-    game.phase = "draw";
-    touch(game);
+  if (game.wall.length <= deadWallLimit(game)) {
+    settleDraw(game);
     return;
   }
   const player = getPlayer(game, seatIndex);
@@ -546,12 +636,12 @@ function advanceTurnAndDraw(game: CoreGame, seatIndex: number): void {
 }
 
 function drawNormalTile(game: CoreGame, player: CorePlayer): void {
-  while (game.wall.length > 16) {
+  while (game.wall.length > deadWallLimit(game)) {
     const tile = game.wall.shift();
     if (!tile) {
       break;
     }
-    if (tile.kind === "flower") {
+    if (game.mode === "taiwan" && tile.kind === "flower") {
       player.flowers.push(tile);
       if (resolveFlowerDrawWin(game, player, tile)) {
         return;
@@ -564,16 +654,16 @@ function drawNormalTile(game: CoreGame, player: CorePlayer): void {
     player.hand = sortTiles(player.hand);
     return;
   }
-  game.phase = "draw";
+  settleDraw(game);
 }
 
 function drawSupplementTile(game: CoreGame, player: CorePlayer, afterKong: boolean): void {
-  while (game.wall.length > 16) {
+  while (game.wall.length > deadWallLimit(game)) {
     const tile = game.wall.pop();
     if (!tile) {
       break;
     }
-    if (tile.kind === "flower") {
+    if (game.mode === "taiwan" && tile.kind === "flower") {
       player.flowers.push(tile);
       if (resolveFlowerDrawWin(game, player, tile)) {
         return;
@@ -585,16 +675,16 @@ function drawSupplementTile(game: CoreGame, player: CorePlayer, afterKong: boole
     player.hand = sortTiles(player.hand);
     return;
   }
-  game.phase = "draw";
+  settleDraw(game);
 }
 
 function drawUntilNonFlowerCount(game: CoreGame, player: CorePlayer, targetCount: number, initialDraw: boolean): void {
-  while (player.hand.length < targetCount && game.wall.length > 16) {
+  while (player.hand.length < targetCount && game.wall.length > deadWallLimit(game)) {
     const tile = initialDraw ? game.wall.shift() : game.wall.pop();
     if (!tile) {
       return;
     }
-    if (tile.kind === "flower") {
+    if (game.mode === "taiwan" && tile.kind === "flower") {
       player.flowers.push(tile);
       continue;
     }
@@ -642,23 +732,78 @@ function resolveFlowerDrawWin(game: CoreGame, drawingPlayer: CorePlayer, flowerT
 }
 
 function settleWin(game: CoreGame, context: WinContext): void {
-  const table: ScoringTable = {
-    handId: game.handId,
-    dealerSeat: game.dealerSeat,
-    roundWind: game.roundWind,
-    dealerStreak: game.dealerStreak,
-    config: game.config
-  };
-  const players = game.players.map(toScoringPlayer);
-  const settlement = calculateScore(players, table, context);
+  const settlement =
+    game.mode === "riichi"
+      ? calculateRiichiScore(
+          game.players.map((player) => ({
+            seatIndex: player.seatIndex,
+            wind: player.wind,
+            hand: player.hand,
+            melds: player.melds,
+            declaredRiichi: player.declaredRiichi
+          })),
+          {
+            handId: game.handId,
+            dealerSeat: game.dealerSeat,
+            roundWind: game.roundWind,
+            honba: game.riichi?.honba ?? 0,
+            riichiSticks: game.riichi?.riichiSticks ?? 0,
+            doraIndicators: game.riichi?.doraIndicators ?? [],
+            uraDoraIndicators: game.riichi?.uraDoraIndicators ?? []
+          },
+          context
+        )
+      : calculateScore(
+          game.players.map(toScoringPlayer),
+          {
+            handId: game.handId,
+            dealerSeat: game.dealerSeat,
+            roundWind: game.roundWind,
+            dealerStreak: game.dealerStreak,
+            config: game.config
+          },
+          context
+        );
   for (const payment of settlement.payments) {
     game.players[payment.fromSeat]!.coins -= payment.amount;
     game.players[payment.toSeat]!.coins += payment.amount;
+  }
+  if (game.mode === "riichi" && game.riichi) {
+    game.riichi.riichiSticks = 0;
   }
   game.settlement = settlement;
   game.phase = "settled";
   delete game.claimWindow;
   delete game.pendingRobKong;
+  touch(game);
+}
+
+function settleDraw(game: CoreGame): void {
+  game.phase = "draw";
+  delete game.claimWindow;
+  delete game.pendingRobKong;
+
+  if (game.mode === "riichi") {
+    const tenpaiSeats = game.players.filter((player) => isRiichiTenpai(game, player)).map((player) => player.seatIndex);
+    const notenSeats = game.players.filter((player) => !tenpaiSeats.includes(player.seatIndex)).map((player) => player.seatIndex);
+    const payments = buildNotenPayments(tenpaiSeats, notenSeats);
+    for (const payment of payments) {
+      game.players[payment.fromSeat]!.coins -= payment.amount;
+      game.players[payment.toSeat]!.coins += payment.amount;
+    }
+    game.settlement = {
+      handId: game.handId,
+      winMode: "draw",
+      drawReason: "荒牌流局",
+      tenpaiSeats,
+      notenSeats,
+      baseTai: 0,
+      patterns: payments.length > 0 ? [{ id: "noten-payment", name: "不聽罰符", tai: 0 }] : [],
+      payments,
+      totalGain: 0
+    };
+  }
+
   touch(game);
 }
 
@@ -681,6 +826,91 @@ function isHumanHand(game: CoreGame): boolean {
   return !game.firstClaimOrMeldHappened && game.lastDiscard.firstDiscardOfSeat && game.players.every((player) => player.discards.length <= 1);
 }
 
+function canPlayerWin(game: CoreGame, player: CorePlayer): boolean {
+  if (game.mode === "riichi") {
+    const rawDrawnId = player.drawnTileId?.replace("supplement:", "");
+    const winningTile = rawDrawnId ? player.hand.find((tile) => tile.id === rawDrawnId) : player.hand.at(-1);
+    return canRiichiWin(player.hand, player.melds, winningTile, { winMode: "selfDraw" });
+  }
+  const rawDrawnId = player.drawnTileId?.replace("supplement:", "");
+  const winningTile = rawDrawnId ? player.hand.find((tile) => tile.id === rawDrawnId) : player.hand.at(-1);
+  if (winningTile && isRonBlocked(player, winningTile)) {
+    return false;
+  }
+  return canWin(player.hand, player.melds);
+}
+
+function canPlayerWinWithTile(game: CoreGame, player: CorePlayer, tile: Tile): boolean {
+  if (game.mode === "riichi") {
+    if (isDiscardFuriten(game, player, tile)) {
+      return false;
+    }
+    return canRiichiWin([...player.hand, tile], player.melds, tile, { winMode: "discard" });
+  }
+  if (isRonBlocked(player, tile)) {
+    return false;
+  }
+  return canWinWithTile(player.hand, tile, player.melds);
+}
+
+function isDiscardFuriten(game: CoreGame, player: CorePlayer, targetTile: Tile): boolean {
+  if (game.mode !== "riichi") {
+    return false;
+  }
+  const winningKeys = new Set(getWinningTilesForHand(game, player.hand, player.melds).map(tileKey));
+  if (!winningKeys.has(tileKey(targetTile))) {
+    return false;
+  }
+  return player.discards.some((discard) => winningKeys.has(tileKey(discard)));
+}
+
+function isRiichiTenpai(game: CoreGame, player: CorePlayer): boolean {
+  return game.mode === "riichi" && getWinningTilesForHand(game, player.hand, player.melds).length > 0;
+}
+
+function buildNotenPayments(tenpaiSeats: number[], notenSeats: number[]): ScoringResult["payments"] {
+  if (tenpaiSeats.length === 0 || notenSeats.length === 0) {
+    return [];
+  }
+  const amountPerPair = 3000 / (tenpaiSeats.length * notenSeats.length);
+  return notenSeats.flatMap((fromSeat) =>
+    tenpaiSeats.map((toSeat) => ({
+      fromSeat,
+      toSeat,
+      amount: amountPerPair,
+      tai: 0,
+      reason: "不聽罰符"
+    }))
+  );
+}
+
+function applyPassedWinBlocks(game: CoreGame): void {
+  if (game.mode !== "taiwan" || !game.claimWindow) {
+    return;
+  }
+  for (const option of game.claimWindow.options) {
+    if (!game.claimWindow.passedSeatIndices.includes(option.seatIndex)) {
+      continue;
+    }
+    if (!option.actions.some((action) => action.type === "win")) {
+      continue;
+    }
+    const player = getPlayer(game, option.seatIndex);
+    const blockedKeys = getWinningTiles(player.hand, player.melds).map(tileKey);
+    if (blockedKeys.length > 0) {
+      player.ronBlockedTileKeys = [...new Set([...player.ronBlockedTileKeys, ...blockedKeys])];
+    }
+  }
+}
+
+function clearRonBlocks(player: CorePlayer): void {
+  player.ronBlockedTileKeys = [];
+}
+
+function isRonBlocked(player: CorePlayer, tile: Tile): boolean {
+  return player.ronBlockedTileKeys.includes(tileKey(tile));
+}
+
 function canDeclareTing(player: CorePlayer): boolean {
   if (isTing(player.hand, player.melds)) {
     return true;
@@ -689,6 +919,40 @@ function canDeclareTing(player: CorePlayer): boolean {
     const remaining = player.hand.filter((candidate) => candidate.id !== tile.id);
     return isTing(remaining, player.melds);
   });
+}
+
+function canDeclareRiichi(player: CorePlayer): boolean {
+  if (player.melds.some((meld) => !meld.concealed)) {
+    return false;
+  }
+  return riichiShanten(player.hand, player.melds) <= 0;
+}
+
+function orderPrivateHand(hand: Tile[], rawDrawnId?: string): Tile[] {
+  if (!rawDrawnId) {
+    return sortTiles(hand);
+  }
+  const drawnTile = hand.find((tile) => tile.id === rawDrawnId);
+  if (!drawnTile) {
+    return sortTiles(hand);
+  }
+  return [...sortTiles(hand.filter((tile) => tile.id !== rawDrawnId)), drawnTile];
+}
+
+function getTingHints(game: CoreGame, player: CorePlayer): PrivatePlayerState["tingHints"] {
+  if (game.phase !== "playing" || game.currentSeat !== player.seatIndex) {
+    return [];
+  }
+
+  const hints: PrivatePlayerState["tingHints"] = [];
+  for (const tile of legalDiscardTiles(player)) {
+    const remaining = removeOneTileById(player.hand, tile.id);
+    const winningTiles = getWinningTilesForHand(game, remaining, player.melds);
+    if (winningTiles.length > 0) {
+      hints.push({ discardTile: tile, winningTiles });
+    }
+  }
+  return hints;
 }
 
 function getCurrentPlayerKongOptions(player: CorePlayer): string[][] {
@@ -710,10 +974,52 @@ function getCurrentPlayerKongOptions(player: CorePlayer): string[][] {
 
 function getWinningTilesForPlayer(game: CoreGame, seatIndex: number): Tile[] {
   const player = getPlayer(game, seatIndex);
-  if (game.phase === "playing" && game.currentSeat === seatIndex && canWin(player.hand, player.melds)) {
+  if (game.phase === "playing" && game.currentSeat === seatIndex && canPlayerWin(game, player)) {
     return [];
   }
-  return getWinningTiles(player.hand, player.melds);
+  if (game.phase === "playing" && game.currentSeat === seatIndex) {
+    const waits: Tile[] = [];
+    for (const tile of legalDiscardTiles(player)) {
+      waits.push(...getWinningTilesForHand(game, removeOneTileById(player.hand, tile.id), player.melds));
+    }
+    return dedupeTilesByKey(waits);
+  }
+  return getWinningTilesForHand(game, player.hand, player.melds);
+}
+
+function getWinningTilesForHand(game: CoreGame, hand: Tile[], melds: Meld[]): Tile[] {
+  if (game.mode === "riichi") {
+    return getRiichiWinningTiles(
+      hand,
+      melds,
+      allPlayableTileKeys().map((key) => createTileFromKey(key))
+    );
+  }
+  return getWinningTiles(hand, melds);
+}
+
+function dedupeTilesByKey(tiles: Tile[]): Tile[] {
+  const seen = new Set<string>();
+  const unique: Tile[] = [];
+  for (const tile of tiles) {
+    const key = tileKey(tile);
+    if (!seen.has(key)) {
+      seen.add(key);
+      unique.push(tile);
+    }
+  }
+  return sortTiles(unique);
+}
+
+function removeOneTileById(tiles: Tile[], tileId: string): Tile[] {
+  let removed = false;
+  return tiles.filter((tile) => {
+    if (!removed && tile.id === tileId) {
+      removed = true;
+      return false;
+    }
+    return true;
+  });
 }
 
 function legalDiscardTiles(player: CorePlayer): Tile[] {
@@ -722,6 +1028,10 @@ function legalDiscardTiles(player: CorePlayer): Tile[] {
   }
   const rawDrawnId = player.drawnTileId.replace("supplement:", "");
   return player.hand.filter((tile) => tile.id === rawDrawnId);
+}
+
+function deadWallLimit(game: CoreGame): number {
+  return game.mode === "riichi" ? 14 : 16;
 }
 
 function consumeChowTiles(hand: Tile[], claimedTile: Tile, tileIds: string[]): Tile[] {

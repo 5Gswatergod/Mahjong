@@ -105,9 +105,10 @@ function evaluatePatterns(
   const isMenqing = winner.melds.every((meld) => meld.type === "concealedKong");
   const isSelfDraw = context.winMode === "selfDraw";
   const isEarthTing = winner.declaredEarthTing;
+  const isFiveConcealedTriplets = concealedTriplets >= 5;
 
   if (context.isInitialWin && winner.seatIndex === table.dealerSeat) {
-    add(patterns, "heavenly-hand", "天胡", 24);
+    add(patterns, "heavenly-hand", "天胡", 16);
   }
   if (context.isFirstDrawWin && winner.seatIndex !== table.dealerSeat) {
     add(patterns, "earthly-hand", "地胡", 16);
@@ -129,24 +130,24 @@ function evaluatePatterns(
   }
 
   if (allTilesAreHonors) {
-    add(patterns, "all-honors", "字一色", 8);
+    add(patterns, "all-honors", "字一色", 16);
   }
   if (allTilesAreOneSuit) {
-    add(patterns, "clean-one-suit", "清一色", 8);
+    add(patterns, "clean-one-suit", "清一色", 12);
   } else if (halfFlush) {
     add(patterns, "half-flush", "湊一色", 4);
   }
 
-  if (concealedTriplets >= 5) {
-    add(patterns, "five-concealed-triplets", "五暗坎", 8);
+  if (isFiveConcealedTriplets) {
+    add(patterns, "five-concealed-triplets", "五暗坎", 13);
   } else if (concealedTriplets >= 4) {
     add(patterns, "four-concealed-triplets", "四暗坎", 5);
   } else if (concealedTriplets >= 3) {
     add(patterns, "three-concealed-triplets", "三暗坎", 2);
   }
 
-  if (allPongs && !allTilesAreHonors) {
-    add(patterns, "all-pongs", "碰碰胡", 4);
+  if (allPongs && !allTilesAreHonors && !isFiveConcealedTriplets) {
+    add(patterns, "all-pongs", "對對胡", 4);
   }
 
   if (context.winMode === "eightFlowers") {
@@ -194,10 +195,12 @@ function evaluatePatterns(
     add(patterns, "earth-ting", "地聽", 4);
   }
 
-  if (isMenqing && isSelfDraw && !isEarthTing) {
+  if (isFiveConcealedTriplets && isSelfDraw) {
+    add(patterns, "concealed-self-draw", "不求自摸", 2);
+  } else if (isMenqing && isSelfDraw && !isEarthTing) {
     add(patterns, "menqing-self-draw", "門清自摸", 3);
   } else {
-    if (isMenqing && !isEarthTing) {
+    if (isMenqing && !isEarthTing && !isFiveConcealedTriplets) {
       add(patterns, "menqing", "門清", 1);
     }
     if (isSelfDraw) {

@@ -1,0 +1,16 @@
+.git
+.github
+node_modules
+logs
+coverage
+dist
+dist-types
+.vite
+*.tsbuildinfo
+.env
+.env.*
+npm-debug.log*
+Dockerfile
+docker-compose*.yml
+README.md
+docs

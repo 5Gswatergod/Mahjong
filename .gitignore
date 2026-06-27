@@ -9,3 +9,6 @@ logs/
 .env.*
 !.env.example
 npm-debug.log*
+*.key
+*.key.pub
+deploy_known_hosts

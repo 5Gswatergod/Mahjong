@@ -1,6 +1,7 @@
 export type Suit = "characters" | "dots" | "bamboo";
 export type Wind = "east" | "south" | "west" | "north";
 export type Dragon = "red" | "green" | "white";
+export type GameMode = "taiwan" | "riichi";
 export type Flower =
   | "spring"
   | "summer"
@@ -21,6 +22,7 @@ export interface Tile {
   wind?: Wind;
   dragon?: Dragon;
   flower?: Flower;
+  red?: boolean;
   copy: number;
   label: string;
   sortKey: number;
@@ -47,6 +49,7 @@ export interface PlayerSeat {
   wind: Wind;
   playerId?: string;
   name?: string;
+  isBot?: boolean;
   coins: number;
   ready: boolean;
   connected: boolean;
@@ -72,6 +75,15 @@ export const DEFAULT_GAME_CONFIG: GameConfig = {
 
 export type GamePhase = "waiting" | "playing" | "claiming" | "settled" | "draw";
 export type WinMode = "selfDraw" | "discard" | "robKong" | "sevenFlowersRob" | "eightFlowers";
+export type SettlementMode = WinMode | "draw";
+
+export interface RiichiRoundState {
+  roundIndex: number;
+  honba: number;
+  riichiSticks: number;
+  doraIndicators: Tile[];
+  uraDoraIndicators?: Tile[];
+}
 
 export interface PatternScore {
   id: string;
@@ -100,8 +112,11 @@ export interface PaymentResult {
 
 export interface ScoringResult {
   handId: string;
-  winnerSeat: number;
-  winMode: WinMode;
+  winnerSeat?: number;
+  winMode: SettlementMode;
+  drawReason?: string;
+  tenpaiSeats?: number[];
+  notenSeats?: number[];
   baseTai: number;
   patterns: PatternScore[];
   payments: PaymentResult[];
@@ -128,7 +143,8 @@ export type LegalActionType =
   | "kong"
   | "win"
   | "pass"
-  | "declareTing";
+  | "declareTing"
+  | "declareRiichi";
 
 export interface LegalAction {
   type: LegalActionType;
@@ -158,6 +174,7 @@ export interface PublicPlayerState extends PlayerSeat {
   melds: Meld[];
   discards: Tile[];
   declaredTing: boolean;
+  declaredRiichi?: boolean;
 }
 
 export interface PrivatePlayerState {
@@ -165,11 +182,20 @@ export interface PrivatePlayerState {
   hand: Tile[];
   legalActions: LegalAction[];
   winningTiles: Tile[];
+  drawnTileId?: string;
+  tingDiscardIds: string[];
+  tingHints: TingHint[];
+}
+
+export interface TingHint {
+  discardTile: Tile;
+  winningTiles: Tile[];
 }
 
 export interface GameState {
   id: string;
   handId: string;
+  mode: GameMode;
   phase: GamePhase;
   config: GameConfig;
   dealerSeat: number;
@@ -184,6 +210,7 @@ export interface GameState {
   };
   claimWindow?: ClaimWindow;
   players: PublicPlayerState[];
+  riichi?: RiichiRoundState;
   settlement?: ScoringResult;
   startedAt?: number;
   updatedAt: number;
@@ -191,6 +218,7 @@ export interface GameState {
 
 export interface RoomSnapshot {
   code: string;
+  mode: GameMode;
   hostPlayerId: string;
   seats: PlayerSeat[];
   game?: GameState;
@@ -206,11 +234,13 @@ export interface GuestAuthResponse {
 
 export type ClientToServerEvents = {
   "room.ready": (payload: { ready: boolean }) => void;
+  "room.addBot": (payload: { seatIndex: number }) => void;
   "room.leave": () => void;
   "game.discard": (payload: { tileId: string }) => void;
   "game.claim": (payload: { type: "chow" | "pong" | "kong" | "win" | "pass"; tileIds?: string[] }) => void;
   "game.kong": (payload: { tileIds: string[]; meldId?: string }) => void;
   "game.declareTing": () => void;
+  "game.declareRiichi": () => void;
   "game.resync": () => void;
 };
 
@@ -225,6 +255,11 @@ export type ServerToClientEvents = {
 };
 
 export const winds: Wind[] = ["east", "south", "west", "north"];
+
+export const gameModeLabels: Record<GameMode, string> = {
+  taiwan: "台灣麻將",
+  riichi: "日式麻將"
+};
 
 export const windLabels: Record<Wind, string> = {
   east: "東",

@@ -1,12 +1,17 @@
 import cors from "@fastify/cors";
+import fastifyStatic from "@fastify/static";
 import Fastify from "fastify";
+import { existsSync } from "node:fs";
+import path from "node:path";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 import { Pool } from "pg";
 import { Server } from "socket.io";
 import { nanoid } from "nanoid";
 import { z } from "zod";
 import {
   applyClaim,
+  applyDeclareRiichi,
   applyDeclareTing,
   applyDiscard,
   applyKong,
@@ -21,7 +26,10 @@ import {
 import {
   DEFAULT_GAME_CONFIG,
   type ClientToServerEvents,
+  type GameMode,
+  type LegalAction,
   type PlayerSeat,
+  type PrivatePlayerState,
   type RoomSnapshot,
   type ServerToClientEvents,
   type SocketData,
@@ -46,12 +54,14 @@ interface GuestSession {
 
 interface Room {
   code: string;
+  mode: GameMode;
   hostPlayerId: string;
   seats: PlayerSeat[];
   game?: CoreGame;
   createdAt: number;
   updatedAt: number;
   disconnectTimers: Map<string, NodeJS.Timeout>;
+  botTimer?: NodeJS.Timeout;
 }
 
 interface PersistedEvent {
@@ -107,8 +117,11 @@ class PgEventStore implements EventStore {
   }
 }
 
+const currentFile = fileURLToPath(import.meta.url);
+const currentDir = path.dirname(currentFile);
 const port = Number(process.env.PORT ?? 4000);
 const webOrigin = process.env.WEB_ORIGIN ?? "http://localhost:5173";
+const staticDir = process.env.STATIC_DIR ?? path.resolve(currentDir, "../../web/dist");
 const fastify = Fastify({ logger: true });
 const io = new Server<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>(fastify.server, {
   cors: {
@@ -149,9 +162,29 @@ fastify.post("/api/rooms", async (request, reply) => {
     return reply.code(401).send({ message: "Missing or invalid guest token." });
   }
 
-  const room = createRoom(session);
+  const body = z.object({ mode: z.enum(["taiwan", "riichi"]).default("taiwan") }).parse(request.body ?? {});
+  const room = createRoom(session, body.mode);
   rooms.set(room.code, room);
-  await persist(room.code, "room.created", { hostPlayerId: session.playerId });
+  await persist(room.code, "room.created", { hostPlayerId: session.playerId, mode: room.mode });
+  return snapshotRoom(room);
+});
+
+fastify.post("/api/rooms/:code/bots", async (request, reply) => {
+  const session = authenticateRequest(request.headers.authorization);
+  if (!session) {
+    return reply.code(401).send({ message: "Missing or invalid guest token." });
+  }
+  const params = z.object({ code: z.string().trim().min(4).max(8) }).parse(request.params);
+  const body = z.object({ seatIndex: z.number().int().min(0).max(3) }).parse(request.body ?? {});
+  const room = rooms.get(params.code.toUpperCase());
+  if (!room) {
+    return reply.code(404).send({ message: "Room not found." });
+  }
+  addBotToRoom(room, session.playerId, body.seatIndex);
+  await persist(room.code, "room.botAdded", { seatIndex: body.seatIndex });
+  maybeStartHand(room);
+  broadcastRoom(room);
+  scheduleBot(room);
   return snapshotRoom(room);
 });
 
@@ -180,6 +213,26 @@ fastify.get("/api/rooms/:code", async (request, reply) => {
   }
   return snapshotRoom(room);
 });
+
+if (existsSync(path.join(staticDir, "index.html"))) {
+  await fastify.register(fastifyStatic, {
+    root: staticDir,
+    prefix: "/"
+  });
+
+  fastify.setNotFoundHandler((request, reply) => {
+    const requestPath = request.url.split("?")[0] ?? "/";
+    if (requestPath === "/api" || requestPath.startsWith("/api/") || requestPath.startsWith("/socket.io")) {
+      return reply.code(404).send({ message: "Not found." });
+    }
+
+    if (request.headers.accept?.includes("text/html")) {
+      return reply.sendFile("index.html");
+    }
+
+    return reply.code(404).send({ message: "Not found." });
+  });
+}
 
 io.use((socket, next) => {
   const token = typeof socket.handshake.auth.token === "string" ? socket.handshake.auth.token : "";
@@ -224,6 +277,18 @@ io.on("connection", (socket) => {
       await persist(currentRoom.code, "room.ready", { playerId: socket.data.playerId, ready });
       maybeStartHand(currentRoom);
       broadcastRoom(currentRoom);
+      scheduleBot(currentRoom);
+    });
+  });
+
+  socket.on("room.addBot", async ({ seatIndex }) => {
+    await handleSocketAction(socket, async () => {
+      const currentRoom = requireRoom(socket.data.roomCode);
+      addBotToRoom(currentRoom, socket.data.playerId, seatIndex);
+      await persist(currentRoom.code, "room.botAdded", { seatIndex });
+      maybeStartHand(currentRoom);
+      broadcastRoom(currentRoom);
+      scheduleBot(currentRoom);
     });
   });
 
@@ -279,6 +344,14 @@ io.on("connection", (socket) => {
     });
   });
 
+  socket.on("game.declareRiichi", async () => {
+    await handleGameAction(socket, "game.declareRiichi", () => {
+      const currentRoom = requireRoom(socket.data.roomCode);
+      applyDeclareRiichi(requireGame(currentRoom), socket.data.seatIndex);
+      afterGameMutation(currentRoom);
+    });
+  });
+
   socket.on("game.resync", () => {
     emitFullState(room, socket.data.seatIndex, socket.id);
   });
@@ -322,11 +395,13 @@ setInterval(() => {
 
 await fastify.listen({ port, host: "0.0.0.0" });
 
-function createRoom(session: GuestSession): Room {
+function createRoom(session: GuestSession, mode: GameMode): Room {
   const code = createRoomCode();
   const now = Date.now();
+  const initialCoins = mode === "riichi" ? 25000 : DEFAULT_GAME_CONFIG.initialCoins;
   return {
     code,
+    mode,
     hostPlayerId: session.playerId,
     seats: [
       {
@@ -334,14 +409,14 @@ function createRoom(session: GuestSession): Room {
         wind: "east",
         playerId: session.playerId,
         name: session.name,
-        coins: DEFAULT_GAME_CONFIG.initialCoins,
+        coins: initialCoins,
         ready: false,
         connected: false
       },
       ...winds.slice(1).map((wind, offset) => ({
         seatIndex: offset + 1,
         wind,
-        coins: DEFAULT_GAME_CONFIG.initialCoins,
+        coins: initialCoins,
         ready: false,
         connected: false
       }))
@@ -370,9 +445,33 @@ function joinRoom(room: Room, session: GuestSession): PlayerSeat {
   return seat;
 }
 
+function addBotToRoom(room: Room, requesterPlayerId: string, seatIndex: number): PlayerSeat {
+  if (requesterPlayerId !== room.hostPlayerId) {
+    throw new Error("Only the host can add computer players.");
+  }
+  if (room.game && room.game.phase !== "settled" && room.game.phase !== "draw") {
+    throw new Error("Computer players can only be added before a hand starts.");
+  }
+  const seat = room.seats[seatIndex];
+  if (!seat) {
+    throw new Error("Seat not found.");
+  }
+  if (seat.playerId) {
+    throw new Error("Seat is already occupied.");
+  }
+  seat.playerId = `bot_${nanoid(10)}`;
+  seat.name = `電腦 ${seatIndex + 1}`;
+  seat.isBot = true;
+  seat.ready = true;
+  seat.connected = true;
+  seat.coins = room.mode === "riichi" ? 25000 : DEFAULT_GAME_CONFIG.initialCoins;
+  room.updatedAt = Date.now();
+  return seat;
+}
+
 function maybeStartHand(room: Room): void {
   const full = room.seats.every((seat) => seat.playerId);
-  const allReady = room.seats.every((seat) => seat.ready);
+  const allReady = room.seats.every((seat) => seat.ready || seat.isBot);
   if (!full || !allReady) {
     return;
   }
@@ -383,9 +482,25 @@ function maybeStartHand(room: Room): void {
   const previous = room.game;
   const previousWinner = previous?.settlement?.winnerSeat;
   const previousDealer = previous?.dealerSeat ?? 0;
-  const dealerSeat = previous && previousWinner === previousDealer ? previousDealer : previous ? (previousDealer + 1) % 4 : 0;
-  const dealerStreak = previous && previousWinner === previousDealer ? previous.dealerStreak + 1 : 0;
-  room.game = createGame(room.seats, { dealerSeat, dealerStreak });
+  const previousRoundIndex = previous?.riichi?.roundIndex ?? 0;
+  const dealerContinues = Boolean(
+    previous &&
+      (previousWinner === previousDealer ||
+        (room.mode === "taiwan" && previous.phase === "draw") ||
+        (room.mode === "riichi" && previous.settlement?.tenpaiSeats?.includes(previousDealer)))
+  );
+  const roundIndex = room.mode === "riichi" && previous ? (dealerContinues ? previousRoundIndex : previousRoundIndex + 1) : previousRoundIndex;
+  const dealerSeat =
+    room.mode === "riichi"
+      ? roundIndex % 4
+      : dealerContinues
+        ? previousDealer
+        : previous
+          ? (previousDealer + 1) % 4
+          : 0;
+  const roundWind = room.mode === "riichi" ? (roundIndex >= 4 ? "south" : "east") : "east";
+  const dealerStreak = previous && dealerContinues ? previous.dealerStreak + 1 : 0;
+  room.game = createGame(room.seats, { mode: room.mode, dealerSeat, roundWind, roundIndex, dealerStreak });
   for (const seat of room.seats) {
     seat.ready = false;
   }
@@ -411,6 +526,7 @@ function afterGameMutation(room: Room): void {
   if (room.game.settlement) {
     io.to(room.code).emit("game.settlement", room.game.settlement);
   }
+  scheduleBot(room);
 }
 
 function broadcastRoom(room: Room): void {
@@ -455,9 +571,95 @@ function emitFullState(room: Room, seatIndex: number, socketId: string): void {
   }
 }
 
+function scheduleBot(room: Room): void {
+  if (room.botTimer) {
+    return;
+  }
+  room.botTimer = setTimeout(() => {
+    delete room.botTimer;
+    void runBotStep(room);
+  }, 450);
+}
+
+async function runBotStep(room: Room): Promise<void> {
+  if (!room.game || room.game.phase === "settled" || room.game.phase === "draw") {
+    return;
+  }
+
+  try {
+    if (room.game.phase === "claiming" && room.game.claimWindow) {
+      const option = room.game.claimWindow.options.find((candidate) => room.seats[candidate.seatIndex]?.isBot);
+      if (!option) {
+        return;
+      }
+      const action = chooseBotClaimAction(option.actions);
+      applyClaim(room.game, option.seatIndex, action.type as "chow" | "pong" | "kong" | "win" | "pass", action.tileIds ?? []);
+      await persist(room.code, "bot.claim", { seatIndex: option.seatIndex, type: action.type });
+      afterGameMutation(room);
+      return;
+    }
+
+    if (room.game.phase !== "playing") {
+      return;
+    }
+    const seat = room.seats[room.game.currentSeat];
+    if (!seat?.isBot) {
+      return;
+    }
+    const privateState = getPrivateState(room.game, room.game.currentSeat);
+    const action = chooseBotTurnAction(privateState);
+    if (!action) {
+      return;
+    }
+    if (action.type === "win") {
+      applySelfDrawWin(room.game, room.game.currentSeat);
+    } else if (action.type === "declareRiichi") {
+      applyDeclareRiichi(room.game, room.game.currentSeat);
+    } else if (action.type === "discard" && action.tileId) {
+      applyDiscard(room.game, room.game.currentSeat, action.tileId);
+    }
+    await persist(room.code, "bot.action", { seatIndex: room.game.currentSeat, type: action.type });
+    afterGameMutation(room);
+  } catch (error) {
+    io.to(room.code).emit("game.error", { message: error instanceof Error ? error.message : "Bot action failed." });
+  }
+}
+
+function chooseBotClaimAction(actions: LegalAction[]): LegalAction {
+  return actions.find((action) => action.type === "win") ?? actions.find((action) => action.type === "pass") ?? actions[0]!;
+}
+
+function chooseBotTurnAction(privateState: PrivatePlayerState): LegalAction | undefined {
+  const actions = privateState.legalActions;
+  const win = actions.find((action) => action.type === "win");
+  if (win) return win;
+  const riichi = actions.find((action) => action.type === "declareRiichi");
+  if (riichi) return riichi;
+  const discards = actions.filter((action) => action.type === "discard" && action.tileId);
+  if (discards.length === 0) {
+    return actions.find((action) => action.type === "pass");
+  }
+  const handById = new Map(privateState.hand.map((tile) => [tile.id, tile]));
+  return [...discards].sort((left, right) => {
+    const leftTile = handById.get(left.tileId!);
+    const rightTile = handById.get(right.tileId!);
+    return discardScore(leftTile) - discardScore(rightTile);
+  })[0];
+}
+
+function discardScore(tile: PrivatePlayerState["hand"][number] | undefined): number {
+  if (!tile) return 0;
+  if (tile.kind === "honor") return 1;
+  if (!tile.rank) return 1;
+  const terminalPenalty = tile.rank === 1 || tile.rank === 9 ? 0 : 2;
+  const middleBonus = tile.rank >= 3 && tile.rank <= 7 ? 2 : 1;
+  return terminalPenalty + middleBonus;
+}
+
 function snapshotRoom(room: Room): RoomSnapshot {
   return {
     code: room.code,
+    mode: room.mode,
     hostPlayerId: room.hostPlayerId,
     seats: room.seats,
     ...(room.game ? { game: toPublicGameState(room.game) } : {}),
