@@ -17,10 +17,12 @@ import {
   applyKong,
   applySelfDrawWin,
   autoDiscardIfNeeded,
+  autoRiichiDiscardIfNeeded,
   createGame,
   type CoreGame,
   getPrivateState,
   passExpiredClaimWindow,
+  passExpiredTurn,
   toPublicGameState
 } from "@taiwan-mahjong/game-core";
 import {
@@ -62,6 +64,7 @@ interface Room {
   updatedAt: number;
   disconnectTimers: Map<string, NodeJS.Timeout>;
   botTimer?: NodeJS.Timeout;
+  autoRiichiTimer?: NodeJS.Timeout;
 }
 
 interface PersistedEvent {
@@ -143,6 +146,10 @@ fastify.get("/health", async () => ({
   uptime: process.uptime(),
   rooms: rooms.size,
   persistence: databaseConnection ? "postgres" : "memory"
+}));
+
+fastify.get("/api/time", async () => ({
+  serverTime: Date.now()
 }));
 
 fastify.post("/api/auth/guest", async (request) => {
@@ -394,11 +401,12 @@ io.on("connection", (socket) => {
 
 setInterval(() => {
   for (const room of rooms.values()) {
-    if (!room.game || room.game.phase !== "claiming") {
+    if (!room.game || (room.game.phase !== "claiming" && room.game.phase !== "playing")) {
       continue;
     }
     const before = room.game.updatedAt;
     passExpiredClaimWindow(room.game);
+    passExpiredTurn(room.game);
     if (room.game.updatedAt !== before) {
       afterGameMutation(room);
     }
@@ -450,7 +458,7 @@ function joinRoom(room: Room, session: GuestSession): PlayerSeat {
   }
   seat.playerId = session.playerId;
   seat.name = session.name;
-  seat.coins = DEFAULT_GAME_CONFIG.initialCoins;
+  seat.coins = room.mode === "riichi" ? 25000 : DEFAULT_GAME_CONFIG.initialCoins;
   seat.ready = false;
   seat.connected = false;
   room.updatedAt = Date.now();
@@ -575,6 +583,7 @@ function afterGameMutation(room: Room): void {
     io.to(room.code).emit("game.settlement", room.game.settlement);
   }
   scheduleBot(room);
+  scheduleAutoRiichiDiscard(room);
 }
 
 function broadcastRoom(room: Room): void {
@@ -627,6 +636,35 @@ function scheduleBot(room: Room): void {
     delete room.botTimer;
     void runBotStep(room);
   }, 450);
+}
+
+function scheduleAutoRiichiDiscard(room: Room): void {
+  if (room.autoRiichiTimer || !room.game || room.game.mode !== "riichi" || room.game.phase !== "playing") {
+    return;
+  }
+
+  const currentSeat = room.game.currentSeat;
+  const seat = room.seats[currentSeat];
+  const player = room.game.players[currentSeat];
+  if (!seat || seat.isBot || !player?.declaredRiichi || !player.drawnTileId) {
+    return;
+  }
+
+  if (getPrivateState(room.game, currentSeat).legalActions.some((action) => action.type === "win")) {
+    return;
+  }
+
+  room.autoRiichiTimer = setTimeout(() => {
+    delete room.autoRiichiTimer;
+    if (!room.game) {
+      return;
+    }
+    const seatIndex = room.game.currentSeat;
+    if (autoRiichiDiscardIfNeeded(room.game, seatIndex)) {
+      void persist(room.code, "game.autoRiichiDiscard", { seatIndex });
+      afterGameMutation(room);
+    }
+  }, 700);
 }
 
 async function runBotStep(room: Room): Promise<void> {
@@ -743,6 +781,7 @@ function snapshotRoom(room: Room): RoomSnapshot {
   return {
     code: room.code,
     mode: room.mode,
+    serverTime: Date.now(),
     hostPlayerId: room.hostPlayerId,
     seats: room.seats,
     ...(room.game ? { game: toPublicGameState(room.game) } : {}),

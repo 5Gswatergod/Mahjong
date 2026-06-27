@@ -62,6 +62,7 @@ export interface GameConfig {
   disconnectGraceMs: number;
   claimWindowMs: number;
   autoDiscardMs: number;
+  latencyGraceMs: number;
 }
 
 export const DEFAULT_GAME_CONFIG: GameConfig = {
@@ -70,7 +71,8 @@ export const DEFAULT_GAME_CONFIG: GameConfig = {
   initialCoins: 10000,
   disconnectGraceMs: 90_000,
   claimWindowMs: 8_000,
-  autoDiscardMs: 12_000
+  autoDiscardMs: 12_000,
+  latencyGraceMs: 800
 };
 
 export type GamePhase = "waiting" | "playing" | "claiming" | "settled" | "draw";
@@ -117,6 +119,8 @@ export interface ScoringResult {
   drawReason?: string;
   tenpaiSeats?: number[];
   notenSeats?: number[];
+  winnerHand?: Tile[];
+  winnerMelds?: Meld[];
   baseTai: number;
   patterns: PatternScore[];
   payments: PaymentResult[];
@@ -150,6 +154,7 @@ export interface LegalAction {
   type: LegalActionType;
   tileId?: string;
   tileIds?: string[];
+  meldId?: string;
   fromSeat?: number;
   description?: string;
 }
@@ -197,9 +202,11 @@ export interface GameState {
   handId: string;
   mode: GameMode;
   phase: GamePhase;
+  serverTime: number;
   config: GameConfig;
   dealerSeat: number;
   currentSeat: number;
+  turnDeadlineAt?: number;
   roundWind: Wind;
   dealerStreak: number;
   wallCount: number;
@@ -219,6 +226,7 @@ export interface GameState {
 export interface RoomSnapshot {
   code: string;
   mode: GameMode;
+  serverTime: number;
   hostPlayerId: string;
   seats: PlayerSeat[];
   game?: GameState;

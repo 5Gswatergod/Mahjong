@@ -5,6 +5,7 @@ import {
   applyDiscard,
   applySelfDrawWin,
   applyDeclareRiichi,
+  autoRiichiDiscardIfNeeded,
   buildWall,
   calculateScore,
   canWin,
@@ -13,6 +14,8 @@ import {
   decomposeWinningHand,
   getPrivateState,
   getWinningTiles,
+  passExpiredTurn,
+  toPublicGameState,
   tileKey
 } from "../src/index.js";
 
@@ -271,6 +274,16 @@ describe("engine", () => {
     expect(game.wall.length).toBeGreaterThanOrEqual(16);
   });
 
+  it("publishes turn deadlines and server time for countdown display", () => {
+    const before = Date.now();
+    const game = createGame(seats(), { config: { autoDiscardMs: 9000 }, random: () => 0.42 });
+    const publicState = toPublicGameState(game);
+
+    expect(game.turnDeadlineAt).toBeGreaterThanOrEqual(before + 9000);
+    expect(publicState.turnDeadlineAt).toBe(game.turnDeadlineAt);
+    expect(publicState.serverTime).toBeGreaterThanOrEqual(before);
+  });
+
   it("deals riichi hands, dora, and no flowers", () => {
     const game = createGame(seats(), { mode: "riichi", random: () => 0.42 });
     expect(game.mode).toBe("riichi");
@@ -497,6 +510,184 @@ describe("engine", () => {
 
     const furitenClaim = game.claimWindow?.options.find((option) => option.seatIndex === 1);
     expect(furitenClaim?.actions.some((action) => action.type === "win")).not.toBe(true);
+  });
+
+  it("keeps the latest unclaimed discard visible after advancing the turn", () => {
+    const game = createGame(seats(), { random: () => 0.42 });
+    const discardTile = tile("dragon:white", 0);
+    const nextDraw = tile("characters:9", 0);
+    game.currentSeat = 0;
+    game.wall = [
+      nextDraw,
+      ...tiles([
+        "characters:7",
+        "characters:8",
+        "characters:9",
+        "dots:1",
+        "dots:2",
+        "dots:3",
+        "dots:4",
+        "dots:5",
+        "dots:6",
+        "bamboo:4",
+        "bamboo:5",
+        "bamboo:6",
+        "dragon:red",
+        "dragon:green",
+        "wind:north",
+        "wind:south"
+      ])
+    ];
+    game.players[0]!.hand = [discardTile];
+    game.players[1]!.hand = [];
+    game.players[2]!.hand = [];
+    game.players[3]!.hand = [];
+
+    applyDiscard(game, 0, discardTile.id);
+
+    expect(game.phase).toBe("playing");
+    expect(game.currentSeat).toBe(1);
+    expect(game.lastDiscard?.tile.id).toBe(discardTile.id);
+  });
+
+  it("settles a Taiwan exhaustive draw with a settlement payload", () => {
+    const game = createGame(seats(), { random: () => 0.42 });
+    const discardTile = tile("dragon:white", 0);
+    game.currentSeat = 0;
+    game.wall = game.wall.slice(0, 16);
+    game.players[0]!.hand = [discardTile];
+    game.players[1]!.hand = [];
+    game.players[2]!.hand = [];
+    game.players[3]!.hand = [];
+
+    applyDiscard(game, 0, discardTile.id);
+
+    expect(game.phase).toBe("draw");
+    expect(game.settlement?.winMode).toBe("draw");
+    expect(game.settlement?.drawReason).toBe("荒牌流局");
+  });
+
+  it("waits through latency grace before auto-discarding an expired turn", () => {
+    const game = createGame(seats(), { config: { autoDiscardMs: 1000, latencyGraceMs: 500 }, random: () => 0.42 });
+    const discardTile = tile("dragon:white", 0);
+    game.currentSeat = 0;
+    game.turnDeadlineAt = 1000;
+    game.wall = [
+      tile("characters:9", 0),
+      ...tiles([
+        "characters:7",
+        "characters:8",
+        "characters:9",
+        "dots:1",
+        "dots:2",
+        "dots:3",
+        "dots:4",
+        "dots:5",
+        "dots:6",
+        "bamboo:4",
+        "bamboo:5",
+        "bamboo:6",
+        "dragon:red",
+        "dragon:green",
+        "wind:north",
+        "wind:south"
+      ])
+    ];
+    game.players[0]!.hand = [discardTile];
+    game.players[1]!.hand = [];
+    game.players[2]!.hand = [];
+    game.players[3]!.hand = [];
+
+    passExpiredTurn(game, 1499);
+    expect(game.players[0]!.discards).toHaveLength(0);
+    expect(game.currentSeat).toBe(0);
+
+    passExpiredTurn(game, 1500);
+    expect(game.players[0]!.discards.at(-1)?.id).toBe(discardTile.id);
+    expect(game.currentSeat).toBe(1);
+  });
+
+  it("offers added kong actions from an existing pong meld", () => {
+    const game = createGame(seats(), { random: () => 0.42 });
+    const pongTiles = tiles(["dragon:red", "dragon:red", "dragon:red"]);
+    const addTile = tile("dragon:red", 3);
+    game.players[0]!.hand = [
+      addTile,
+      ...tiles([
+        "characters:1",
+        "characters:2",
+        "characters:3",
+        "dots:1",
+        "dots:2",
+        "dots:3",
+        "bamboo:1",
+        "bamboo:2",
+        "bamboo:3",
+        "wind:east",
+        "wind:south",
+        "wind:west",
+        "wind:north"
+      ])
+    ];
+    game.players[0]!.melds = [{ id: "meld_pong_red", type: "pong", tiles: pongTiles, claimedTileId: pongTiles[0]!.id, fromSeat: 1, concealed: false }];
+
+    const action = getPrivateState(game, 0).legalActions.find((candidate) => candidate.type === "kong" && candidate.meldId === "meld_pong_red");
+
+    expect(action?.tileIds).toEqual([addTile.id]);
+  });
+
+  it("auto-discards a drawn tile after riichi when self draw is not available", () => {
+    const game = createGame(seats(), { mode: "riichi", random: () => 0.42 });
+    const drawnTile = tile("dragon:white", 0);
+    game.currentSeat = 0;
+    game.wall = [
+      tile("characters:9", 0),
+      ...tiles([
+        "characters:7",
+        "characters:8",
+        "characters:9",
+        "dots:1",
+        "dots:2",
+        "dots:3",
+        "dots:4",
+        "dots:5",
+        "dots:6",
+        "bamboo:4",
+        "bamboo:5",
+        "bamboo:6",
+        "dragon:red",
+        "dragon:green",
+        "wind:north"
+      ])
+    ];
+    game.players[0]!.declaredRiichi = true;
+    game.players[0]!.declaredTing = true;
+    game.players[0]!.drawnTileId = drawnTile.id;
+    game.players[0]!.hand = [
+      ...tiles([
+        "characters:1",
+        "characters:2",
+        "characters:3",
+        "characters:4",
+        "characters:5",
+        "characters:6",
+        "dots:1",
+        "dots:2",
+        "dots:3",
+        "bamboo:1",
+        "bamboo:2",
+        "bamboo:3",
+        "wind:east"
+      ]),
+      drawnTile
+    ];
+    game.players[1]!.hand = [];
+    game.players[2]!.hand = [];
+    game.players[3]!.hand = [];
+
+    expect(autoRiichiDiscardIfNeeded(game, 0)).toBe(true);
+    expect(game.players[0]!.discards.at(-1)?.id).toBe(drawnTile.id);
+    expect(game.currentSeat).toBe(1);
   });
 
   it("settles riichi exhaustive draw with noten payments", () => {

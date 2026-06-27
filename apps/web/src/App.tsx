@@ -1,6 +1,7 @@
 import {
   Bot,
   Check,
+  Clock3,
   Copy,
   Crown,
   DoorOpen,
@@ -10,14 +11,13 @@ import {
   Send,
   Shuffle,
   Sparkles,
-  Trophy,
   UserPlus,
   UserX,
   Users,
   WifiOff,
   X
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 import {
   type ClientToServerEvents,
@@ -80,6 +80,9 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [selectedTileId, setSelectedTileId] = useState<string | null>(null);
   const [dismissedSettlementHandId, setDismissedSettlementHandId] = useState<string | null>(null);
+  const [clockMs, setClockMs] = useState(() => Date.now());
+  const [clockOffsetMs, setClockOffsetMs] = useState(0);
+  const [latencyMs, setLatencyMs] = useState<number | null>(null);
 
   const mySeat = useMemo(() => {
     if (!room || !session) return undefined;
@@ -93,6 +96,7 @@ export function App() {
   const handSignature = privateState?.hand.map((tile) => tile.id).join("|") ?? "";
   const settlementResult = settlement ?? game?.settlement ?? null;
   const showSettlement = Boolean(settlementResult && dismissedSettlementHandId !== settlementResult.handId);
+  const serverNow = clockMs + clockOffsetMs;
   const canManageSeats = Boolean(
     room &&
       session &&
@@ -104,7 +108,6 @@ export function App() {
     () => new Set(actions.filter((action) => action.type === "discard").map((action) => action.tileId).filter(Boolean) as string[]),
     [actions]
   );
-  const tingDiscardIds = useMemo(() => new Set(privateState?.tingDiscardIds ?? []), [privateState?.tingDiscardIds]);
   const actionHintIds = useMemo(
     () => buildActionHintIds(actions, privateState?.hand ?? [], game?.claimWindow?.discard, privateState?.drawnTileId),
     [actions, game?.claimWindow?.discard, privateState?.drawnTileId, privateState?.hand]
@@ -119,6 +122,40 @@ export function App() {
       setDismissedSettlementHandId(null);
     }
   }, [settlementResult]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setClockMs(Date.now()), 250);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const applyServerTime = useCallback((serverTime: number | undefined) => {
+    if (typeof serverTime !== "number") return;
+    const nextOffset = serverTime - Date.now();
+    setClockOffsetMs((current) => Math.round(current === 0 ? nextOffset : current * 0.75 + nextOffset * 0.25));
+  }, []);
+
+  const syncServerClock = useCallback(async () => {
+    const startedAt = Date.now();
+    try {
+      const response = await fetch("/api/time", { cache: "no-store" });
+      const payload = (await response.json()) as { serverTime?: unknown };
+      const endedAt = Date.now();
+      if (typeof payload.serverTime !== "number") return;
+      setLatencyMs(endedAt - startedAt);
+      const estimatedServerNow = payload.serverTime;
+      const estimatedClientNowAtServerSend = startedAt + (endedAt - startedAt) / 2;
+      const nextOffset = estimatedServerNow - estimatedClientNowAtServerSend;
+      setClockOffsetMs((current) => Math.round(current === 0 ? nextOffset : current * 0.6 + nextOffset * 0.4));
+    } catch {
+      setLatencyMs(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    void syncServerClock();
+    const timer = window.setInterval(() => void syncServerClock(), 10_000);
+    return () => window.clearInterval(timer);
+  }, [syncServerClock]);
 
   const renewGuestSession = useCallback(async (name?: string): Promise<GuestAuthResponse> => {
     const payload = await requestGuestSession(name);
@@ -180,11 +217,13 @@ export function App() {
     });
 
     nextSocket.on("room.snapshot", (snapshot) => {
+      applyServerTime(snapshot.serverTime);
       setRoom(snapshot);
       setGame(snapshot.game ?? null);
       setSettlement(snapshot.game?.settlement ?? null);
     });
     nextSocket.on("game.publicState", (state) => {
+      applyServerTime(state.serverTime);
       setGame(state);
       setSettlement(state.settlement ?? null);
     });
@@ -204,7 +243,7 @@ export function App() {
     return () => {
       nextSocket.disconnect();
     };
-  }, [handleAuthExpired, room?.code, session?.token]);
+  }, [applyServerTime, handleAuthExpired, room?.code, session?.token]);
 
   const authenticate = useCallback(async () => {
     setBusy(true);
@@ -229,6 +268,7 @@ export function App() {
           body: JSON.stringify({ mode: selectedMode })
         })
       );
+      applyServerTime(snapshot.serverTime);
       setRoom(snapshot);
       setJoinCode(snapshot.code);
     } catch (caught) {
@@ -240,7 +280,7 @@ export function App() {
     } finally {
       setBusy(false);
     }
-  }, [handleAuthExpired, runWithFreshSession, selectedMode, session]);
+  }, [applyServerTime, handleAuthExpired, runWithFreshSession, selectedMode, session]);
 
   const joinRoom = useCallback(async () => {
     if (!session || !joinCode.trim()) return;
@@ -253,6 +293,7 @@ export function App() {
           method: "POST"
         })
       );
+      applyServerTime(snapshot.serverTime);
       setRoom(snapshot);
     } catch (caught) {
       if (caught instanceof AuthExpiredError) {
@@ -263,7 +304,7 @@ export function App() {
     } finally {
       setBusy(false);
     }
-  }, [handleAuthExpired, joinCode, runWithFreshSession, session]);
+  }, [applyServerTime, handleAuthExpired, joinCode, runWithFreshSession, session]);
 
   const toggleReady = useCallback(() => {
     if (!socket || !mySeat) return;
@@ -292,6 +333,7 @@ export function App() {
             body: JSON.stringify({ seatIndex })
           })
         );
+        applyServerTime(snapshot.serverTime);
         setRoom(snapshot);
         setGame(snapshot.game ?? null);
         setSettlement(snapshot.game?.settlement ?? null);
@@ -303,7 +345,7 @@ export function App() {
         setError(caught instanceof Error ? caught.message : "加入電腦玩家失敗。");
       }
     },
-    [handleAuthExpired, room, runWithFreshSession, session]
+    [applyServerTime, handleAuthExpired, room, runWithFreshSession, session]
   );
 
   const clearSeat = useCallback(
@@ -337,7 +379,7 @@ export function App() {
       } else if (action.type === "declareRiichi") {
         socket.emit("game.declareRiichi");
       } else if (action.type === "kong" && action.fromSeat === undefined) {
-        socket.emit("game.kong", { tileIds: action.tileIds ?? [] });
+        socket.emit("game.kong", { tileIds: action.tileIds ?? [], ...(action.meldId ? { meldId: action.meldId } : {}) });
       } else if (["win", "chow", "pong", "kong", "pass"].includes(action.type)) {
         const payload: { type: "win" | "chow" | "pong" | "kong" | "pass"; tileIds?: string[] } = {
           type: action.type as "win" | "chow" | "pong" | "kong" | "pass",
@@ -447,21 +489,27 @@ export function App() {
             />
 
             <div className="boardStack">
-              <TableScreen room={room} game={game} privateState={privateState} mySeatIndex={mySeat?.seatIndex} myTurn={Boolean(myTurn)} />
-              <ActionDock actions={visibleActions} tingTiles={privateState?.winningTiles ?? []} onAction={triggerAction} />
+              <TableScreen room={room} game={game} mySeatIndex={mySeat?.seatIndex} myTurn={Boolean(myTurn)} serverNow={serverNow} latencyMs={latencyMs} />
+              <ActionDock actions={visibleActions} hand={privateState?.hand ?? []} claimDiscard={game?.claimWindow?.discard} onAction={triggerAction} />
               <Hand
                 tiles={privateState?.hand ?? []}
                 discardableIds={discardableIds}
                 selectedTileId={selectedTileId}
                 drawnTileId={privateState?.drawnTileId}
-                tingDiscardIds={tingDiscardIds}
                 actionHintIds={actionHintIds}
                 onTileClick={discard}
                 myTurn={Boolean(myTurn)}
               />
             </div>
 
-            <StatusPanel game={game} privateState={privateState} mySeatIndex={mySeat?.seatIndex} onReady={toggleReady} mySeatReady={mySeat?.ready} />
+            <StatusPanel
+              game={game}
+              privateState={privateState}
+              mySeatIndex={mySeat?.seatIndex}
+              onReady={toggleReady}
+              mySeatReady={mySeat?.ready}
+              latencyMs={latencyMs}
+            />
           </div>
 
           {showSettlement && settlementResult && (
@@ -538,15 +586,17 @@ function SeatManager({
 function TableScreen({
   room,
   game,
-  privateState,
   mySeatIndex,
-  myTurn
+  myTurn,
+  serverNow,
+  latencyMs
 }: {
   room: RoomSnapshot;
   game: GameState | null;
-  privateState: PrivatePlayerState | null;
   mySeatIndex: number | undefined;
   myTurn: boolean;
+  serverNow: number;
+  latencyMs: number | null;
 }) {
   if (!game) {
     return (
@@ -603,24 +653,19 @@ function TableScreen({
           <strong>{windLabels[game.roundWind]}場</strong>
           <span>剩 {liveWallCount}</span>
           <span>{currentPlayer ? `${windLabels[currentPlayer.wind]}家` : "-"}</span>
+          <span className="wide">{game.mode === "riichi" ? `${game.riichi?.honba ?? game.dealerStreak} 本場` : `${game.dealerStreak} 連莊`}</span>
         </div>
         <div className="centerPoints">
           <strong>{formatPoints(selfPlayer?.coins ?? 0)}</strong>
           <span>{phaseLabel(game.phase)}</span>
         </div>
+        <TurnCountdown game={game} serverNow={serverNow} latencyMs={latencyMs} />
         {game.lastDiscard && (
           <div className="lastDiscard">
             <MiniTile tile={game.lastDiscard.tile} />
-            <span>{windLabels[game.players[game.lastDiscard.seatIndex]?.wind ?? "east"]}家打出</span>
+            <span className="lastDiscardLabel">{windLabels[game.players[game.lastDiscard.seatIndex]?.wind ?? "east"]}家打出</span>
           </div>
         )}
-        {privateState?.winningTiles.length ? (
-          <div className="waitPreview">
-            {privateState.winningTiles.slice(0, 5).map((tile) => (
-              <MiniTile key={tile.id} tile={tile} />
-            ))}
-          </div>
-        ) : null}
       </div>
     </div>
   );
@@ -684,13 +729,15 @@ function StatusPanel({
   privateState,
   mySeatIndex,
   onReady,
-  mySeatReady
+  mySeatReady,
+  latencyMs
 }: {
   game: GameState | null;
   privateState: PrivatePlayerState | null;
   mySeatIndex: number | undefined;
   onReady: () => void;
   mySeatReady: boolean | undefined;
+  latencyMs: number | null;
 }) {
   const selfPlayer = mySeatIndex === undefined ? undefined : game?.players.find((player) => player.seatIndex === mySeatIndex);
   const canReady = !game || game.phase === "settled" || game.phase === "draw";
@@ -727,6 +774,10 @@ function StatusPanel({
             <dt>點數</dt>
             <dd>{formatPoints(selfPlayer?.coins ?? 0)}</dd>
           </div>
+          <div>
+            <dt>延遲</dt>
+            <dd className={`latencyValue ${latencyLevel(latencyMs)}`}>{formatLatency(latencyMs)}</dd>
+          </div>
         </dl>
         <button className={mySeatReady ? "readyButton ready" : "readyButton"} onClick={onReady} disabled={!canReady}>
           <Check size={18} />
@@ -734,7 +785,6 @@ function StatusPanel({
         </button>
       </div>
 
-      <WinningTiles tiles={privateState?.winningTiles ?? []} hints={privateState?.tingHints ?? []} />
       <RiichiMeta game={game} />
     </aside>
   );
@@ -768,37 +818,71 @@ function RiichiMeta({ game }: { game: GameState | null }) {
   );
 }
 
+function TurnCountdown({ game, serverNow, latencyMs }: { game: GameState; serverNow: number; latencyMs: number | null }) {
+  const deadline = activeDeadline(game);
+  if (!deadline) return null;
+
+  const totalMs = game.phase === "claiming" ? game.config.claimWindowMs : game.config.autoDiscardMs;
+  const remainingMs = Math.max(0, deadline - serverNow);
+  const seconds = Math.max(0, Math.ceil(remainingMs / 1000));
+  const progress = Math.max(0, Math.min(1, remainingMs / Math.max(totalMs, 1)));
+  const urgent = seconds <= 3;
+  const style = { "--timer-progress": `${progress * 360}deg` } as CSSProperties;
+
+  return (
+    <div className={urgent ? "turnCountdown urgent" : "turnCountdown"}>
+      <div className="timerRing" style={style}>
+        <span>{seconds}</span>
+      </div>
+      <div className="timerMeta">
+        <strong>{game.phase === "claiming" ? "回應倒數" : "出牌倒數"}</strong>
+        <span>{formatLatency(latencyMs)}</span>
+      </div>
+    </div>
+  );
+}
+
 function ActionDock({
   actions,
-  tingTiles,
+  hand,
+  claimDiscard,
   onAction
 }: {
   actions: LegalAction[];
-  tingTiles: Tile[];
+  hand: Tile[];
+  claimDiscard: Tile | undefined;
   onAction: (action: LegalAction) => void;
 }) {
   const availableActions = actions.filter((action) => action.type !== "discard");
-  if (availableActions.length === 0 && tingTiles.length === 0) return null;
+  if (availableActions.length === 0) return null;
+  const handById = new Map(hand.map((tile) => [tile.id, tile]));
   return (
     <div className="actionDock">
-      {tingTiles.length > 0 && (
-        <div className="tingPreview" title="可胡牌">
-          <span>聽</span>
-          {tingTiles.slice(0, 6).map((tile) => (
-            <MiniTile key={tile.id} tile={tile} />
-          ))}
-        </div>
-      )}
-      {availableActions.map((action, index) => (
-        <button
-          key={`${action.type}-${action.tileId ?? ""}-${action.tileIds?.join("-") ?? ""}-${index}`}
-          className={action.type === "win" ? "actionButton win" : action.type === "pass" ? "actionButton pass" : "actionButton"}
-          onClick={() => onAction(action)}
-          title={action.description ?? actionButtonLabel(action)}
-        >
-          {actionButtonLabel(action)}
-        </button>
-      ))}
+      {availableActions.map((action, index) => {
+        const previewTiles = actionPreviewTiles(action, hand, handById, claimDiscard);
+        return (
+          <button
+            key={`${action.type}-${action.tileId ?? ""}-${action.tileIds?.join("-") ?? ""}-${action.meldId ?? ""}-${index}`}
+            className={[
+              action.type === "win" ? "actionButton win" : action.type === "pass" ? "actionButton pass" : "actionButton",
+              previewTiles.length > 0 ? "withPreview" : ""
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            onClick={() => onAction(action)}
+            title={action.description ?? actionButtonLabel(action)}
+          >
+            <span className="actionButtonText">{actionButtonLabel(action)}</span>
+            {previewTiles.length > 0 && (
+              <span className="actionTilePreview">
+                {previewTiles.map((tile) => (
+                  <MiniTile key={`${action.type}-${action.meldId ?? action.tileId ?? ""}-${tile.id}`} tile={tile} />
+                ))}
+              </span>
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -808,7 +892,6 @@ function Hand({
   discardableIds,
   selectedTileId,
   drawnTileId,
-  tingDiscardIds,
   actionHintIds,
   onTileClick,
   myTurn
@@ -817,7 +900,6 @@ function Hand({
   discardableIds: Set<string>;
   selectedTileId: string | null;
   drawnTileId: string | undefined;
-  tingDiscardIds: Set<string>;
   actionHintIds: Set<string>;
   onTileClick: (tile: Tile) => void;
   myTurn: boolean;
@@ -834,41 +916,11 @@ function Hand({
             highlighted={myTurn && discardableIds.has(tile.id)}
             selected={selectedTileId === tile.id}
             drawn={drawnTileId === tile.id}
-            tingHint={tingDiscardIds.has(tile.id)}
             actionHint={actionHintIds.has(tile.id)}
             onClick={() => onTileClick(tile)}
           />
         ))}
       </div>
-    </div>
-  );
-}
-
-function WinningTiles({ tiles, hints }: { tiles: Tile[]; hints: PrivatePlayerState["tingHints"] }) {
-  return (
-    <div className="infoPanel">
-      <div className="panelTitle">
-        <Trophy size={17} />
-        <h2>聽牌提示</h2>
-      </div>
-      {hints.length > 0 ? (
-        <div className="tingHintList">
-          {hints.map((hint) => (
-            <div className="tingHintRow" key={hint.discardTile.id}>
-              <span>打</span>
-              <MiniTile tile={hint.discardTile} />
-              <span>聽</span>
-              <div className="miniTileRow">
-                {hint.winningTiles.map((tile) => (
-                  <MiniTile key={tile.id} tile={tile} />
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="miniTileRow relaxed">{tiles.length === 0 ? <span className="muted">尚無提示</span> : tiles.map((tile) => <MiniTile key={tile.id} tile={tile} />)}</div>
-      )}
     </div>
   );
 }
@@ -891,7 +943,8 @@ function SettlementOverlay({
   const isDraw = result.winMode === "draw";
   const winner = typeof result.winnerSeat === "number" ? game?.players.find((player) => player.seatIndex === result.winnerSeat) : undefined;
   const isWinnerPerspective = !isDraw && privateState !== null && result.winnerSeat === privateState.seatIndex;
-  const displayTiles = isWinnerPerspective ? privateState.hand : [];
+  const displayTiles = result.winnerHand ?? (isWinnerPerspective ? privateState.hand : []);
+  const displayMelds = result.winnerMelds ?? [];
   const scoreRows = game?.players.map((player) => ({ player, delta: scoreDeltaForSeat(result, player.seatIndex) })) ?? [];
 
   return (
@@ -912,8 +965,19 @@ function SettlementOverlay({
           </button>
 
           <div className="settlementTiles">
-            {displayTiles.length > 0 ? (
-              displayTiles.map((tile) => <TileButton key={tile.id} tile={tile} disabled />)
+            {displayTiles.length > 0 || displayMelds.length > 0 ? (
+              <>
+                {displayTiles.map((tile) => (
+                  <TileButton key={tile.id} tile={tile} disabled />
+                ))}
+                {displayMelds.map((meld) => (
+                  <span className="settlementMeld" key={meld.id}>
+                    {meld.tiles.map((tile) => (
+                      <MiniTile key={`${meld.id}-${tile.id}`} tile={tile} />
+                    ))}
+                  </span>
+                ))}
+              </>
             ) : (
               <span>{isDraw ? `聽牌：${formatSeatList(result.tenpaiSeats)}` : "贏家手牌僅本人可見"}</span>
             )}
@@ -984,7 +1048,6 @@ function TileButton({
   highlighted,
   selected,
   drawn,
-  tingHint,
   actionHint,
   onClick
 }: {
@@ -993,17 +1056,15 @@ function TileButton({
   highlighted?: boolean;
   selected?: boolean;
   drawn?: boolean;
-  tingHint?: boolean;
   actionHint?: boolean;
   onClick?: () => void;
 }) {
-  const imagePath = tileImagePath(tile);
+  const imagePath = tile.label === "暗" ? undefined : tileImagePath(tile);
   const className = [
     "tileButton",
     highlighted ? "highlighted" : "",
     selected ? "selected" : "",
     drawn ? "drawn" : "",
-    tingHint ? "tingHint" : "",
     actionHint ? "actionHint" : "",
     tile.red ? "redFive" : ""
   ]
@@ -1018,7 +1079,7 @@ function TileButton({
 }
 
 function MiniTile({ tile, flower }: { tile: Tile; flower?: boolean }) {
-  const imagePath = tileImagePath(tile);
+  const imagePath = tile.label === "暗" ? undefined : tileImagePath(tile);
   const className = ["miniTile", flower ? "flower" : "", tile.red ? "redFive" : ""].filter(Boolean).join(" ");
 
   return (
@@ -1108,6 +1169,28 @@ function phaseLabel(phase: GameState["phase"]): string {
   return labels[phase];
 }
 
+function activeDeadline(game: GameState): number | undefined {
+  if (game.phase === "claiming") {
+    return game.claimWindow?.deadlineAt;
+  }
+  if (game.phase === "playing") {
+    return game.turnDeadlineAt;
+  }
+  return undefined;
+}
+
+function formatLatency(latencyMs: number | null): string {
+  if (latencyMs === null) return "測量中";
+  return `${Math.round(latencyMs)} ms`;
+}
+
+function latencyLevel(latencyMs: number | null): string {
+  if (latencyMs === null) return "unknown";
+  if (latencyMs >= 800) return "bad";
+  if (latencyMs >= 300) return "warn";
+  return "good";
+}
+
 function actionLabel(action: LegalAction): string {
   if (action.description) return action.description;
   const labels: Record<LegalAction["type"], string> = {
@@ -1142,6 +1225,24 @@ function formatSeatList(seats: number[] | undefined): string {
     return "無";
   }
   return seats.map((seat) => `${seat + 1}家`).join("、");
+}
+
+function actionPreviewTiles(action: LegalAction, hand: Tile[], handById: Map<string, Tile>, claimDiscard: Tile | undefined): Tile[] {
+  if (action.tileIds?.length) {
+    const tiles = action.tileIds.map((tileId) => handById.get(tileId)).filter((tile): tile is Tile => Boolean(tile));
+    if (claimDiscard && action.fromSeat !== undefined) {
+      return [...tiles, claimDiscard];
+    }
+    return tiles;
+  }
+
+  if (!claimDiscard || !["chow", "pong", "kong", "win"].includes(action.type)) {
+    return [];
+  }
+
+  const needed = action.type === "kong" ? 3 : action.type === "pong" ? 2 : action.type === "win" ? 0 : 2;
+  const matchingHandTiles = hand.filter((tile) => isSameTileFace(tile, claimDiscard)).slice(0, needed);
+  return [...matchingHandTiles, claimDiscard];
 }
 
 function buildActionHintIds(actions: LegalAction[], hand: Tile[], claimDiscard: Tile | undefined, drawnTileId: string | undefined): Set<string> {

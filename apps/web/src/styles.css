@@ -776,7 +776,7 @@ input {
 
 .roundDial span,
 .roundDial strong,
-.lastDiscard span {
+.lastDiscardLabel {
   min-width: 0;
   padding: 4px 6px;
   overflow: hidden;
@@ -790,6 +790,10 @@ input {
 
 .roundDial strong {
   color: #f4d887;
+}
+
+.roundDial .wide {
+  grid-column: 1 / -1;
 }
 
 .centerPoints {
@@ -810,10 +814,86 @@ input {
   font-weight: 900;
 }
 
+.turnCountdown {
+  min-width: 128px;
+  min-height: 52px;
+  padding: 6px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 232, 178, 0.14);
+  border-radius: 8px;
+}
+
+.timerRing {
+  width: 38px;
+  height: 38px;
+  padding: 3px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  background: conic-gradient(#f4d887 var(--timer-progress), rgba(255, 255, 255, 0.12) 0);
+  border-radius: 999px;
+}
+
+.timerRing span {
+  width: 100%;
+  height: 100%;
+  display: inline-grid;
+  place-items: center;
+  color: #fff7df;
+  background: #101827;
+  border-radius: inherit;
+  font-size: 15px;
+  font-weight: 1000;
+}
+
+.timerMeta {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  text-align: left;
+}
+
+.timerMeta strong,
+.timerMeta span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timerMeta strong {
+  color: #f4d887;
+  font-size: 12px;
+}
+
+.timerMeta span {
+  color: #bfc8d2;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.turnCountdown.urgent {
+  border-color: rgba(255, 114, 94, 0.58);
+}
+
+.turnCountdown.urgent .timerRing {
+  background: conic-gradient(#ff665c var(--timer-progress), rgba(255, 255, 255, 0.12) 0);
+}
+
 .lastDiscard {
   display: flex;
   align-items: center;
   gap: 5px;
+}
+
+.lastDiscard .miniTile {
+  width: 34px;
+  min-width: 34px;
+  height: 48px;
+  box-shadow: 0 0 0 2px rgba(245, 202, 96, 0.2);
 }
 
 .waitPreview {
@@ -891,14 +971,8 @@ input {
   margin-left: 10px;
 }
 
-.tileButton.tingHint,
 .tileButton.actionHint {
   transform: translateY(-8px);
-}
-
-.tileButton.tingHint {
-  border-color: #39b58b;
-  box-shadow: 0 5px 0 #1f725f;
 }
 
 .tileButton.actionHint {
@@ -912,7 +986,6 @@ input {
   box-shadow: 0 6px 0 #9d7823;
 }
 
-.tileButton.tingHint:disabled,
 .tileButton.actionHint:disabled {
   opacity: 1;
 }
@@ -984,11 +1057,33 @@ input {
   min-width: 58px;
   min-height: 46px;
   padding: 0 14px;
+  flex-direction: column;
   color: #fff7df;
   background: linear-gradient(180deg, #244554, #142532);
   border: 1px solid rgba(255, 232, 178, 0.18);
   box-shadow: 0 4px 0 #07101a;
   font-size: 17px;
+}
+
+.actionButton.withPreview {
+  min-height: 66px;
+  padding: 7px 10px;
+}
+
+.actionButtonText {
+  line-height: 1;
+}
+
+.actionTilePreview {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+
+.actionTilePreview .miniTile {
+  width: 20px;
+  min-width: 20px;
+  height: 29px;
 }
 
 .actionButton.win {
@@ -1046,6 +1141,18 @@ input {
   white-space: nowrap;
   color: #fff7df;
   font-weight: 900;
+}
+
+.latencyValue.good {
+  color: #72efbc;
+}
+
+.latencyValue.warn {
+  color: #f4d887;
+}
+
+.latencyValue.bad {
+  color: #ff8b7f;
 }
 
 .doraStrip {
@@ -1196,6 +1303,17 @@ input {
 
 .settlementTiles .tileButton:disabled {
   opacity: 1;
+}
+
+.settlementMeld {
+  min-height: 50px;
+  padding: 5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: rgba(7, 10, 18, 0.3);
+  border: 1px solid rgba(255, 232, 178, 0.14);
+  border-radius: 8px;
 }
 
 .settlementStats {
@@ -1553,6 +1671,64 @@ input {
   }
 }
 
+@media (max-height: 760px) and (orientation: landscape) {
+  .gameAppShell {
+    padding: 6px;
+  }
+
+  .gameExperience {
+    min-height: calc(100vh - 12px);
+    gap: 6px;
+  }
+
+  .gameHeader {
+    min-height: 52px;
+    padding: 6px 8px;
+  }
+
+  .gameScene {
+    gap: 8px;
+  }
+
+  .seatManager,
+  .infoPanel {
+    padding: 8px;
+  }
+
+  .seatRow {
+    min-height: 48px;
+  }
+
+  .boardStack {
+    grid-template-rows: minmax(330px, 1fr) auto auto;
+    gap: 6px;
+  }
+
+  .gameBoard {
+    min-height: 330px;
+  }
+
+  .centerConsole {
+    min-height: 116px;
+    padding: 8px;
+  }
+
+  .handDock {
+    min-height: 88px;
+    padding: 8px;
+  }
+
+  .handStatus {
+    min-height: 58px;
+  }
+
+  .tileButton {
+    flex-basis: 38px;
+    width: 38px;
+    height: 59px;
+  }
+}
+
 @media (max-width: 560px) {
   .lobbyAppShell {
     padding: 10px;
@@ -1598,7 +1774,9 @@ input {
   }
 
   .spotRiver {
-    display: none;
+    min-height: 28px;
+    max-height: 58px;
+    overflow: hidden;
   }
 
   .centerConsole {

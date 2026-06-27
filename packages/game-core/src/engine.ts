@@ -50,6 +50,7 @@ export interface CoreGame {
   config: GameConfig;
   dealerSeat: number;
   currentSeat: number;
+  turnDeadlineAt?: number;
   roundWind: Wind;
   dealerStreak: number;
   wall: Tile[];
@@ -94,6 +95,7 @@ export function createGame(seats: PlayerSeat[], options: CreateGameOptions = {})
   const mode = options.mode ?? "taiwan";
   const dealerSeat = options.dealerSeat ?? 0;
   const startedAt = Date.now();
+  const config = { ...DEFAULT_GAME_CONFIG, ...options.config };
   const players: CorePlayer[] = seats.map((seat) => {
     const coins = mode === "riichi" && seat.coins === DEFAULT_GAME_CONFIG.initialCoins ? 25000 : seat.coins;
     return {
@@ -123,7 +125,7 @@ export function createGame(seats: PlayerSeat[], options: CreateGameOptions = {})
     handId: options.handId ?? createId("hand"),
     mode,
     phase: "playing",
-    config: { ...DEFAULT_GAME_CONFIG, ...options.config },
+    config,
     dealerSeat,
     currentSeat: dealerSeat,
     roundWind: options.roundWind ?? "east",
@@ -157,6 +159,9 @@ export function createGame(seats: PlayerSeat[], options: CreateGameOptions = {})
   if (mode === "taiwan") {
     resolveImmediateFlowerWin(game, true);
   }
+  if (game.phase === "playing") {
+    startTurnTimer(game);
+  }
   touch(game);
   return game;
 }
@@ -167,9 +172,11 @@ export function toPublicGameState(game: CoreGame): GameState {
     handId: game.handId,
     mode: game.mode,
     phase: game.phase,
+    serverTime: Date.now(),
     config: game.config,
     dealerSeat: game.dealerSeat,
     currentSeat: game.currentSeat,
+    ...(game.turnDeadlineAt ? { turnDeadlineAt: game.turnDeadlineAt } : {}),
     roundWind: game.roundWind,
     dealerStreak: game.dealerStreak,
     wallCount: game.wall.length,
@@ -254,9 +261,7 @@ export function getLegalActions(game: CoreGame, seatIndex: number): LegalAction[
     actions.push({ type: "declareRiichi", description: "立直" });
   }
 
-  for (const tileIds of getCurrentPlayerKongOptions(player)) {
-    actions.push({ type: "kong", tileIds, description: "槓" });
-  }
+  actions.push(...getCurrentPlayerKongActions(player));
 
   return actions;
 }
@@ -279,10 +284,10 @@ export function applyDiscard(game: CoreGame, seatIndex: number, tileId: string):
   const firstDiscardOfSeat = !player.firstDiscardMade;
   player.firstDiscardMade = true;
   game.lastDiscard = { seatIndex, tile, firstDiscardOfSeat };
+  clearTurnTimer(game);
 
   const claimOptions = buildClaimOptions(game, tile, seatIndex);
   if (claimOptions.length === 0) {
-    delete game.lastDiscard;
     advanceTurnAndDraw(game, nextSeat(seatIndex));
     touch(game);
     return;
@@ -351,6 +356,13 @@ export function applyClaim(
     const consumed = removeTilesByType(claimer.hand, claimedTile, 3);
     claimer.melds.push(createMeld("exposedKong", [...consumed, claimedTile], claimedTile.id, fromSeat));
     drawSupplementTile(game, claimer, true);
+    if (isTerminalPhase(game.phase)) {
+      delete game.claimWindow;
+      delete game.pendingRobKong;
+      delete game.lastDiscard;
+      touch(game);
+      return;
+    }
   } else {
     const consumed = consumeChowTiles(claimer.hand, claimedTile, tileIds);
     claimer.melds.push(createMeld("chow", [...consumed, claimedTile], claimedTile.id, fromSeat));
@@ -363,6 +375,7 @@ export function applyClaim(
   delete game.pendingRobKong;
   delete game.lastDiscard;
   game.firstClaimOrMeldHappened = true;
+  startTurnTimer(game);
   touch(game);
 }
 
@@ -402,6 +415,7 @@ export function applyKong(game: CoreGame, seatIndex: number, tileIds: string[], 
     const robOptions = buildRobKongOptions(game, tile, seatIndex);
     if (robOptions.length > 0) {
       game.phase = "claiming";
+      clearTurnTimer(game);
       game.pendingRobKong = { fromSeat: seatIndex, tile, meldId };
       game.claimWindow = {
         id: createId("rob"),
@@ -417,6 +431,9 @@ export function applyKong(game: CoreGame, seatIndex: number, tileIds: string[], 
     meld.type = "addedKong";
     meld.tiles.push(tile);
     drawSupplementTile(game, player, true);
+    if (game.phase === "playing") {
+      startTurnTimer(game);
+    }
     touch(game);
     return;
   }
@@ -432,6 +449,9 @@ export function applyKong(game: CoreGame, seatIndex: number, tileIds: string[], 
   }
   player.melds.push(createMeld("concealedKong", tiles, tiles[0]!.id, seatIndex, true));
   drawSupplementTile(game, player, true);
+  if (game.phase === "playing") {
+    startTurnTimer(game);
+  }
   touch(game);
 }
 
@@ -479,11 +499,11 @@ export function applyDeclareRiichi(game: CoreGame, seatIndex: number): void {
   touch(game);
 }
 
-export function passExpiredClaimWindow(game: CoreGame): void {
+export function passExpiredClaimWindow(game: CoreGame, now = Date.now()): void {
   if (game.phase !== "claiming" || !game.claimWindow) {
     return;
   }
-  if (Date.now() < game.claimWindow.deadlineAt) {
+  if (now < game.claimWindow.deadlineAt + game.config.latencyGraceMs) {
     return;
   }
   for (const option of game.claimWindow.options) {
@@ -503,6 +523,31 @@ export function autoDiscardIfNeeded(game: CoreGame, seatIndex: number): void {
   if (tile) {
     applyDiscard(game, seatIndex, tile.id);
   }
+}
+
+export function passExpiredTurn(game: CoreGame, now = Date.now()): void {
+  if (game.phase !== "playing" || !game.turnDeadlineAt) {
+    return;
+  }
+  if (now < game.turnDeadlineAt + game.config.latencyGraceMs) {
+    return;
+  }
+  autoDiscardIfNeeded(game, game.currentSeat);
+}
+
+export function autoRiichiDiscardIfNeeded(game: CoreGame, seatIndex: number): boolean {
+  if (game.mode !== "riichi" || game.phase !== "playing" || game.currentSeat !== seatIndex) {
+    return false;
+  }
+
+  const player = getPlayer(game, seatIndex);
+  if (!player.declaredRiichi || !player.drawnTileId || canPlayerWin(game, player)) {
+    return false;
+  }
+
+  const beforeDiscardCount = player.discards.length;
+  autoDiscardIfNeeded(game, seatIndex);
+  return player.discards.length > beforeDiscardCount || game.phase !== "playing" || game.currentSeat !== seatIndex;
 }
 
 function buildClaimOptions(game: CoreGame, discard: Tile, fromSeat: number): ClaimOption[] {
@@ -585,14 +630,18 @@ function finishClaimWindowIfAllPassed(game: CoreGame): void {
     drawSupplementTile(game, player, true);
     delete game.pendingRobKong;
     delete game.claimWindow;
+    if (game.phase === "settled" || game.phase === "draw") {
+      touch(game);
+      return;
+    }
     game.phase = "playing";
+    startTurnTimer(game);
     touch(game);
     return;
   }
 
   const next = nextSeat(game.claimWindow.fromSeat);
   delete game.claimWindow;
-  delete game.lastDiscard;
   advanceTurnAndDraw(game, next);
 }
 
@@ -622,6 +671,10 @@ function claimPriority(type: LegalAction["type"]): number {
   return 0;
 }
 
+function isTerminalPhase(phase: GameState["phase"]): boolean {
+  return phase === "settled" || phase === "draw";
+}
+
 function advanceTurnAndDraw(game: CoreGame, seatIndex: number): void {
   game.currentSeat = seatIndex;
   game.phase = "playing";
@@ -632,6 +685,9 @@ function advanceTurnAndDraw(game: CoreGame, seatIndex: number): void {
   const player = getPlayer(game, seatIndex);
   drawNormalTile(game, player);
   player.firstDrawMade = true;
+  if (game.phase === "playing") {
+    startTurnTimer(game);
+  }
   touch(game);
 }
 
@@ -771,8 +827,14 @@ function settleWin(game: CoreGame, context: WinContext): void {
   if (game.mode === "riichi" && game.riichi) {
     game.riichi.riichiSticks = 0;
   }
-  game.settlement = settlement;
+  const winner = getPlayer(game, context.winnerSeat);
+  game.settlement = {
+    ...settlement,
+    winnerHand: buildSettlementHand(winner, context),
+    winnerMelds: publicMelds(winner.melds)
+  };
   game.phase = "settled";
+  clearTurnTimer(game);
   delete game.claimWindow;
   delete game.pendingRobKong;
   touch(game);
@@ -780,12 +842,14 @@ function settleWin(game: CoreGame, context: WinContext): void {
 
 function settleDraw(game: CoreGame): void {
   game.phase = "draw";
+  clearTurnTimer(game);
   delete game.claimWindow;
   delete game.pendingRobKong;
 
+  const tenpaiSeats = game.players.filter((player) => getWinningTilesForHand(game, player.hand, player.melds).length > 0).map((player) => player.seatIndex);
+  const notenSeats = game.players.filter((player) => !tenpaiSeats.includes(player.seatIndex)).map((player) => player.seatIndex);
+
   if (game.mode === "riichi") {
-    const tenpaiSeats = game.players.filter((player) => isRiichiTenpai(game, player)).map((player) => player.seatIndex);
-    const notenSeats = game.players.filter((player) => !tenpaiSeats.includes(player.seatIndex)).map((player) => player.seatIndex);
     const payments = buildNotenPayments(tenpaiSeats, notenSeats);
     for (const payment of payments) {
       game.players[payment.fromSeat]!.coins -= payment.amount;
@@ -800,6 +864,18 @@ function settleDraw(game: CoreGame): void {
       baseTai: 0,
       patterns: payments.length > 0 ? [{ id: "noten-payment", name: "不聽罰符", tai: 0 }] : [],
       payments,
+      totalGain: 0
+    };
+  } else {
+    game.settlement = {
+      handId: game.handId,
+      winMode: "draw",
+      drawReason: "荒牌流局",
+      tenpaiSeats,
+      notenSeats,
+      baseTai: 0,
+      patterns: [],
+      payments: [],
       totalGain: 0
     };
   }
@@ -817,6 +893,19 @@ function toScoringPlayer(player: CorePlayer): ScoringPlayer {
     declaredTing: player.declaredTing,
     declaredEarthTing: player.declaredEarthTing
   };
+}
+
+function buildSettlementHand(winner: CorePlayer, context: WinContext): Tile[] {
+  const rawDrawnId = winner.drawnTileId?.replace("supplement:", "");
+  const hand = context.winMode === "selfDraw" ? winner.hand : appendWinningTileIfNeeded(winner.hand, context.winningTile);
+  return orderPrivateHand(hand, rawDrawnId);
+}
+
+function appendWinningTileIfNeeded(hand: Tile[], winningTile: Tile | undefined): Tile[] {
+  if (!winningTile || hand.some((tile) => tile.id === winningTile.id)) {
+    return hand;
+  }
+  return [...hand, winningTile];
 }
 
 function isHumanHand(game: CoreGame): boolean {
@@ -862,10 +951,6 @@ function isDiscardFuriten(game: CoreGame, player: CorePlayer, targetTile: Tile):
     return false;
   }
   return player.discards.some((discard) => winningKeys.has(tileKey(discard)));
-}
-
-function isRiichiTenpai(game: CoreGame, player: CorePlayer): boolean {
-  return game.mode === "riichi" && getWinningTilesForHand(game, player.hand, player.melds).length > 0;
 }
 
 function buildNotenPayments(tenpaiSeats: number[], notenSeats: number[]): ScoringResult["payments"] {
@@ -955,8 +1040,12 @@ function getTingHints(game: CoreGame, player: CorePlayer): PrivatePlayerState["t
   return hints;
 }
 
-function getCurrentPlayerKongOptions(player: CorePlayer): string[][] {
-  const options: string[][] = [];
+function getCurrentPlayerKongActions(player: CorePlayer): LegalAction[] {
+  if (player.declaredRiichi) {
+    return [];
+  }
+
+  const actions: LegalAction[] = [];
   const byKey = new Map<string, Tile[]>();
   for (const tile of player.hand) {
     const key = tileKey(tile);
@@ -966,10 +1055,25 @@ function getCurrentPlayerKongOptions(player: CorePlayer): string[][] {
   }
   for (const tiles of byKey.values()) {
     if (tiles.length === 4) {
-      options.push(tiles.map((tile) => tile.id));
+      actions.push({ type: "kong", tileIds: tiles.map((tile) => tile.id), description: `暗槓 ${tiles[0]!.label}` });
     }
   }
-  return options;
+
+  for (const meld of player.melds) {
+    if (meld.type !== "pong") {
+      continue;
+    }
+    const baseTile = meld.tiles[0];
+    if (!baseTile) {
+      continue;
+    }
+    const addTile = player.hand.find((tile) => sameTileType(tile, baseTile));
+    if (addTile) {
+      actions.push({ type: "kong", tileIds: [addTile.id], meldId: meld.id, description: `加槓 ${baseTile.label}` });
+    }
+  }
+
+  return actions;
 }
 
 function getWinningTilesForPlayer(game: CoreGame, seatIndex: number): Tile[] {
@@ -1134,6 +1238,18 @@ function publicMelds(melds: Meld[]): Meld[] {
     }
     return meld;
   });
+}
+
+function startTurnTimer(game: CoreGame): void {
+  if (game.phase !== "playing") {
+    clearTurnTimer(game);
+    return;
+  }
+  game.turnDeadlineAt = Date.now() + game.config.autoDiscardMs;
+}
+
+function clearTurnTimer(game: CoreGame): void {
+  delete game.turnDeadlineAt;
 }
 
 function touch(game: CoreGame): void {
