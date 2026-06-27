@@ -5,7 +5,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { Pool } from "pg";
+import { Pool, type PoolConfig } from "pg";
 import { Server } from "socket.io";
 import { nanoid } from "nanoid";
 import { z } from "zod";
@@ -92,8 +92,8 @@ class MemoryEventStore implements EventStore {
 class PgEventStore implements EventStore {
   private readonly pool: Pool;
 
-  constructor(connectionString: string) {
-    this.pool = new Pool({ connectionString });
+  constructor(connection: string | PoolConfig) {
+    this.pool = typeof connection === "string" ? new Pool({ connectionString: connection }) : new Pool(connection);
   }
 
   async init(): Promise<void> {
@@ -132,9 +132,8 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents, InterServerEve
 
 const sessions = new Map<string, GuestSession>();
 const rooms = new Map<string, Room>();
-const eventStore: EventStore = process.env.DATABASE_URL
-  ? new PgEventStore(process.env.DATABASE_URL)
-  : new MemoryEventStore();
+const databaseConnection = resolveDatabaseConnection();
+const eventStore: EventStore = databaseConnection ? new PgEventStore(databaseConnection) : new MemoryEventStore();
 
 await eventStore.init();
 await fastify.register(cors, { origin: webOrigin, credentials: true });
@@ -143,7 +142,7 @@ fastify.get("/health", async () => ({
   ok: true,
   uptime: process.uptime(),
   rooms: rooms.size,
-  persistence: process.env.DATABASE_URL ? "postgres" : "memory"
+  persistence: databaseConnection ? "postgres" : "memory"
 }));
 
 fastify.post("/api/auth/guest", async (request) => {
@@ -654,6 +653,41 @@ function discardScore(tile: PrivatePlayerState["hand"][number] | undefined): num
   const terminalPenalty = tile.rank === 1 || tile.rank === 9 ? 0 : 2;
   const middleBonus = tile.rank >= 3 && tile.rank <= 7 ? 2 : 1;
   return terminalPenalty + middleBonus;
+}
+
+function resolveDatabaseConnection(): string | PoolConfig | undefined {
+  if (process.env.DATABASE_URL) {
+    return process.env.DATABASE_URL;
+  }
+
+  const host = process.env.POSTGRES_HOST;
+  const database = process.env.POSTGRES_DB ?? process.env.POSTGRES_DATABASE;
+  const user = process.env.POSTGRES_USER;
+  const password = process.env.POSTGRES_PASSWORD;
+
+  if (!host || !database || !user || !password) {
+    return undefined;
+  }
+
+  const port = process.env.POSTGRES_PORT ? Number(process.env.POSTGRES_PORT) : undefined;
+  if (port !== undefined && !Number.isInteger(port)) {
+    throw new Error("POSTGRES_PORT must be an integer.");
+  }
+
+  return {
+    host,
+    database,
+    user,
+    password,
+    ...(port ? { port } : {}),
+    ...(process.env.POSTGRES_SSL === "true"
+      ? {
+          ssl: {
+            rejectUnauthorized: process.env.POSTGRES_SSL_REJECT_UNAUTHORIZED !== "false"
+          }
+        }
+      : {})
+  };
 }
 
 function snapshotRoom(room: Room): RoomSnapshot {

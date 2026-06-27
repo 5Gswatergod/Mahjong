@@ -160,7 +160,11 @@ HOST_PORT=4000
 POSTGRES_DB=mahjong
 POSTGRES_USER=mahjong
 POSTGRES_PASSWORD=replace-with-a-long-random-password
+POSTGRES_HOST=postgres
+POSTGRES_PORT=5432
 ```
+
+`DATABASE_URL` is optional. Leave it unset when using the bundled Postgres service; the app builds the database connection from `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD`. Set `DATABASE_URL` only when pointing the app at an external database.
 
 產生密碼：
 

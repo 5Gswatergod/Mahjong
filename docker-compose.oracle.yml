@@ -12,7 +12,12 @@ services:
       PORT: 4000
       STATIC_DIR: /app/apps/web/dist
       WEB_ORIGIN: ${WEB_ORIGIN:?Set WEB_ORIGIN, for example https://mahjong.hydrava.cc}
-      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-mahjong}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-mahjong}}
+      DATABASE_URL: ${DATABASE_URL:-}
+      POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_DB: ${POSTGRES_DB:-mahjong}
+      POSTGRES_USER: ${POSTGRES_USER:-mahjong}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
     ports:
       - "127.0.0.1:${HOST_PORT:-4000}:4000"
     healthcheck:
