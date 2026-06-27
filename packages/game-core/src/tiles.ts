@@ -3,6 +3,7 @@ import {
   dragonLabels,
   type Flower,
   flowerLabels,
+  type GameMode,
   type Suit,
   suitLabels,
   type Tile,
@@ -54,7 +55,11 @@ const flowerBase: Record<Flower, number> = {
   bamboo: 207
 };
 
-export function buildWall(): Tile[] {
+export function buildWall(mode: GameMode = "taiwan"): Tile[] {
+  return mode === "riichi" ? buildRiichiWall() : buildTaiwanWall();
+}
+
+export function buildTaiwanWall(): Tile[] {
   const tiles: Tile[] = [];
 
   for (const suit of suits) {
@@ -108,6 +113,56 @@ export function buildWall(): Tile[] {
       label: flowerLabels[flower],
       sortKey: flowerBase[flower]
     });
+  }
+
+  return tiles;
+}
+
+export function buildRiichiWall(): Tile[] {
+  const tiles: Tile[] = [];
+
+  for (const suit of suits) {
+    for (let rank = 1; rank <= 9; rank += 1) {
+      for (let copy = 0; copy < 4; copy += 1) {
+        const red = rank === 5 && copy === 0;
+        tiles.push({
+          id: `${suit}-${rank}-${copy}`,
+          kind: "suited",
+          suit,
+          rank,
+          ...(red ? { red: true } : {}),
+          copy,
+          label: red ? `赤${rank}${suitLabels[suit]}` : `${rank}${suitLabels[suit]}`,
+          sortKey: suitBase[suit] + rank * 4 + copy
+        });
+      }
+    }
+  }
+
+  for (const wind of winds) {
+    for (let copy = 0; copy < 4; copy += 1) {
+      tiles.push({
+        id: `${wind}-${copy}`,
+        kind: "honor",
+        wind,
+        copy,
+        label: windLabels[wind],
+        sortKey: windBase[wind] + copy
+      });
+    }
+  }
+
+  for (const dragon of dragons) {
+    for (let copy = 0; copy < 4; copy += 1) {
+      tiles.push({
+        id: `${dragon}-${copy}`,
+        kind: "honor",
+        dragon,
+        copy,
+        label: dragonLabels[dragon],
+        sortKey: dragonBase[dragon] + copy
+      });
+    }
   }
 
   return tiles;

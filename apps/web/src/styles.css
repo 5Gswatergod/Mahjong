@@ -79,6 +79,7 @@ button:disabled {
 .primaryButton,
 .secondaryButton,
 .readyButton,
+.tingButton,
 .winButton {
   min-height: 42px;
   border: 0;
@@ -103,7 +104,8 @@ button:disabled {
 }
 
 .secondaryButton,
-.readyButton {
+.readyButton,
+.tingButton {
   color: #173d35;
   background: #e2d6b4;
   padding: 0 14px;
@@ -154,6 +156,29 @@ input {
   padding: 12px;
   background: #f1ead9;
   border-radius: 8px;
+}
+
+.modePicker {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.modeOption,
+.botButton {
+  min-height: 38px;
+  border: 1px solid #cfc3aa;
+  border-radius: 8px;
+  color: #173d35;
+  background: #fffdf5;
+  font-weight: 800;
+}
+
+.modeOption.active,
+.botButton {
+  color: #fff9ed;
+  background: #1f6f8b;
+  border-color: #1f6f8b;
 }
 
 .gameLayout {
@@ -243,6 +268,11 @@ input {
   background: #1f6f8b;
 }
 
+.botButton {
+  min-width: 58px;
+  min-height: 30px;
+}
+
 .compactStats dl {
   margin: 0;
   display: grid;
@@ -257,6 +287,32 @@ input {
 
 .compactStats dd {
   margin: 2px 0 0;
+  font-weight: 800;
+}
+
+.riichiStats dl {
+  margin: 0 0 10px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.riichiStats dt {
+  color: #61726a;
+  font-size: 12px;
+}
+
+.riichiStats dd {
+  margin: 2px 0 0;
+  font-weight: 800;
+}
+
+.doraStrip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #61726a;
+  font-size: 12px;
   font-weight: 800;
 }
 
@@ -375,9 +431,29 @@ input {
   border-radius: 8px;
 }
 
+.tableInfo {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.tableInfo span {
+  min-width: 0;
+  padding: 4px 5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: rgba(255, 250, 240, 0.12);
+  border-radius: 6px;
+}
+
 .handDock {
-  min-height: 92px;
-  padding: 10px;
+  min-height: 106px;
+  padding: 18px 10px 10px;
   display: flex;
   align-items: end;
   gap: 5px;
@@ -387,6 +463,7 @@ input {
 }
 
 .tileButton {
+  position: relative;
   flex: 0 0 44px;
   width: 44px;
   height: 68px;
@@ -401,11 +478,45 @@ input {
   box-shadow: 0 4px 0 #c8b783;
   font-size: 18px;
   font-weight: 900;
+  transition:
+    transform 0.12s ease,
+    border-color 0.12s ease,
+    box-shadow 0.12s ease,
+    margin-left 0.12s ease;
 }
 
 .tileButton.highlighted {
-  transform: translateY(-8px);
   border-color: #f5c44f;
+}
+
+.tileButton.drawn {
+  margin-left: 10px;
+}
+
+.tileButton.tingHint,
+.tileButton.actionHint {
+  transform: translateY(-8px);
+}
+
+.tileButton.tingHint {
+  border-color: #1f6f8b;
+  box-shadow: 0 4px 0 #18586f;
+}
+
+.tileButton.actionHint {
+  border-color: #b64c38;
+  box-shadow: 0 4px 0 #8a392b;
+}
+
+.tileButton.selected {
+  transform: translateY(-14px);
+  border-color: #f5c44f;
+  box-shadow: 0 5px 0 #b98d1f;
+}
+
+.tileButton.tingHint:disabled,
+.tileButton.actionHint:disabled {
+  opacity: 1;
 }
 
 .tileImage {
@@ -420,6 +531,7 @@ input {
 }
 
 .miniTile {
+  position: relative;
   width: 24px;
   min-width: 24px;
   height: 34px;
@@ -436,6 +548,26 @@ input {
   overflow: hidden;
 }
 
+.tileButton.redFive::after,
+.miniTile.redFive::after {
+  content: "";
+  position: absolute;
+  right: 3px;
+  top: 3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #d82e2f;
+  box-shadow: 0 0 0 1px #fffdf5;
+}
+
+.miniTile.redFive::after {
+  right: 2px;
+  top: 2px;
+  width: 5px;
+  height: 5px;
+}
+
 .miniTile.flower {
   color: #8a3d2f;
   background: #ffe8d6;
@@ -448,6 +580,29 @@ input {
   align-items: center;
   justify-content: center;
   gap: 8px;
+}
+
+.tingButton {
+  color: #fff9ed;
+  background: #173d35;
+}
+
+.tingHintList {
+  display: grid;
+  gap: 8px;
+}
+
+.tingHintRow {
+  display: grid;
+  grid-template-columns: auto auto auto minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.tingHintRow .miniTileRow {
+  min-width: 0;
 }
 
 .notice {
@@ -514,11 +669,16 @@ input {
 @media (max-width: 1120px) {
   .gameLayout {
     grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto;
   }
 
   .sidePanel {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tableSurface {
+    order: 2;
   }
 }
 
@@ -536,20 +696,56 @@ input {
   }
 
   .tableSurface {
-    grid-template-rows: minmax(360px, 1fr) auto auto;
+    grid-template-rows: minmax(320px, 1fr) auto auto;
   }
 
   .mahjongTable,
   .tableEmpty {
-    min-height: 360px;
+    min-height: 320px;
   }
 
   .tableSeat {
-    min-width: 150px;
+    min-width: 136px;
+    gap: 5px;
   }
 
   .discardRiver {
-    max-width: 160px;
+    max-width: 142px;
+    min-height: 44px;
+  }
+
+  .playerPlate {
+    min-height: 36px;
+    padding: 6px 7px;
+    gap: 5px;
+    font-size: 12px;
+  }
+
+  .tableCenter {
+    width: min(158px, 48%);
+    min-height: 104px;
+    font-size: 12px;
+  }
+
+  .tableInfo {
+    gap: 4px;
+    font-size: 11px;
+  }
+
+  .handDock {
+    position: sticky;
+    bottom: 0;
+    z-index: 4;
+    min-height: 92px;
+    padding: 16px 8px 8px;
+  }
+
+  .actionDock {
+    position: sticky;
+    bottom: 92px;
+    z-index: 5;
+    padding: 4px;
+    background: #f4f1e8;
   }
 
   .tileButton {
@@ -557,5 +753,9 @@ input {
     width: 38px;
     height: 62px;
     font-size: 16px;
+  }
+
+  .tileButton.drawn {
+    margin-left: 8px;
   }
 }

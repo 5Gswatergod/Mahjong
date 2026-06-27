@@ -1,23 +1,43 @@
 # Taiwan Mahjong Online MVP
 
-線上四人台灣 16 張麻將 MVP。此專案使用 TypeScript npm workspaces：
+React + Fastify + Socket.IO 的線上麻將 MVP，使用 npm workspaces 管理前端、後端與共用套件。
+
+## Structure
 
 - `apps/web`: React + Vite client
 - `apps/server`: Fastify + Socket.IO server
-- `packages/game-core`: 台灣麻將規則與狀態機
-- `packages/shared`: 共用型別
+- `packages/game-core`: Mahjong rules and game state engine
+- `packages/shared`: Shared TypeScript types and constants
 
-## Quick Start
+## Local development
 
 ```bash
 npm install
-npm run dev -w apps/server
-npm run dev -w apps/web
+npm run dev
 ```
 
 Web: http://localhost:5173
-API/Socket server: http://localhost:4000
 
-## Notes
+API / Socket server: http://localhost:4000
 
-第一版採神來也公開規則教學的近似規則，不使用神來也品牌、UI 或素材。虛擬幣僅供娛樂記分，不提供現金交易。
+## Checks
+
+```bash
+npm run typecheck
+npm run test
+npm run build
+```
+
+## Production deployment
+
+This repo can build one Docker image that serves both the Vite frontend and the Fastify / Socket.IO backend.
+
+- Docker image workflow: `.github/workflows/publish-image.yml`
+- Oracle VM deploy workflow: `.github/workflows/deploy-oracle.yml`
+- Oracle + Cloudflare guide: `docs/ORACLE_CLOUD_DEPLOYMENT.md`
+
+Default GHCR image:
+
+```txt
+ghcr.io/5gswatergod/mahjong
+```

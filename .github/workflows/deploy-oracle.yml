@@ -1,0 +1,88 @@
+name: Deploy Oracle VM
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to deploy, for example latest or sha-<40-character-commit>"
+        required: true
+        default: latest
+      app_dir:
+        description: "Absolute app directory on the Oracle VM"
+        required: true
+        default: /home/ubuntu/Mahjong
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prepare image name
+        id: image
+        run: |
+          echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.ORACLE_DEPLOY_SSH_KEY }}" > ~/.ssh/oracle_deploy_key
+          printf '%s\n' "${{ secrets.ORACLE_DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/oracle_deploy_key
+
+      - name: Deploy
+        env:
+          DEPLOY_HOST: ${{ secrets.ORACLE_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.ORACLE_DEPLOY_USER }}
+          APP_DIR: ${{ inputs.app_dir }}
+          IMAGE_REF: ${{ steps.image.outputs.name }}:${{ inputs.image_tag }}
+          REPOSITORY: ${{ github.repository }}
+          TARGET_REF: ${{ github.ref_name }}
+        run: |
+          ssh -i ~/.ssh/oracle_deploy_key -o StrictHostKeyChecking=yes "$DEPLOY_USER@$DEPLOY_HOST" \
+            "APP_DIR='$APP_DIR' IMAGE_REF='$IMAGE_REF' REPOSITORY='$REPOSITORY' TARGET_REF='$TARGET_REF' bash -se" <<'REMOTE'
+          set -euo pipefail
+
+          if ! command -v docker >/dev/null 2>&1; then
+            echo "Docker is not installed on the VM."
+            exit 1
+          fi
+
+          if ! docker compose version >/dev/null 2>&1; then
+            echo "Docker Compose plugin is not installed on the VM."
+            exit 1
+          fi
+
+          if [ ! -d "$APP_DIR/.git" ]; then
+            rm -rf "$APP_DIR"
+            git clone --branch "$TARGET_REF" "https://github.com/$REPOSITORY.git" "$APP_DIR"
+          fi
+
+          cd "$APP_DIR"
+          git fetch origin "$TARGET_REF"
+          if git show-ref --verify --quiet "refs/heads/$TARGET_REF"; then
+            git checkout "$TARGET_REF"
+          else
+            git checkout -b "$TARGET_REF" FETCH_HEAD
+          fi
+          git pull --ff-only origin "$TARGET_REF"
+
+          if [ ! -f .env ]; then
+            cp deploy/oracle.env.example .env
+            echo "Created $APP_DIR/.env. Edit it on the VM, then rerun this workflow."
+            exit 1
+          fi
+
+          printf 'MAHJONG_IMAGE=%s\n' "$IMAGE_REF" > .deploy.env
+
+          docker compose --env-file .env --env-file .deploy.env -f docker-compose.oracle.yml pull
+          docker compose --env-file .env --env-file .deploy.env -f docker-compose.oracle.yml up -d
+          docker image prune -f
+
+          set -a
+          . ./.env
+          set +a
+          curl --retry 10 --retry-delay 3 --fail --silent --show-error "http://127.0.0.1:${HOST_PORT:-4000}/health"
+          REMOTE
