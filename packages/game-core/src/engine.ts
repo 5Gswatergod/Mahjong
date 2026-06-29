@@ -18,6 +18,7 @@ import {
 import { canWin, canWinWithTile, getWinningTiles, isTing, possibleChows } from "./hand.js";
 import { calculateScore, type ScoringPlayer, type ScoringTable } from "./scoring.js";
 import { canRiichiWin, calculateRiichiScore, getRiichiWinningTiles, riichiShanten } from "./riichi.js";
+import { orderWinningHandGroups } from "./settlement-hand.js";
 import { allPlayableTileKeys, buildWall, createTileFromKey, nextSeat, sameTileType, seatDistance, shuffleTiles, sortTiles, tileKey } from "./tiles.js";
 
 export interface CorePlayer {
@@ -898,7 +899,7 @@ function toScoringPlayer(player: CorePlayer): ScoringPlayer {
 function buildSettlementHand(winner: CorePlayer, context: WinContext): Tile[] {
   const rawDrawnId = winner.drawnTileId?.replace("supplement:", "");
   const hand = context.winMode === "selfDraw" ? winner.hand : appendWinningTileIfNeeded(winner.hand, context.winningTile);
-  return orderPrivateHand(hand, rawDrawnId);
+  return orderWinningHandGroups(hand, winner.melds, context.winningTile) ?? orderPrivateHand(hand, rawDrawnId);
 }
 
 function appendWinningTileIfNeeded(hand: Tile[], winningTile: Tile | undefined): Tile[] {
@@ -916,17 +917,36 @@ function isHumanHand(game: CoreGame): boolean {
 }
 
 function canPlayerWin(game: CoreGame, player: CorePlayer): boolean {
-  if (game.mode === "riichi") {
-    const rawDrawnId = player.drawnTileId?.replace("supplement:", "");
-    const winningTile = rawDrawnId ? player.hand.find((tile) => tile.id === rawDrawnId) : player.hand.at(-1);
-    return canRiichiWin(player.hand, player.melds, winningTile, { winMode: "selfDraw" });
+  if (!hasSelfDrawOpportunity(game, player)) {
+    return false;
   }
   const rawDrawnId = player.drawnTileId?.replace("supplement:", "");
   const winningTile = rawDrawnId ? player.hand.find((tile) => tile.id === rawDrawnId) : player.hand.at(-1);
-  if (winningTile && isRonBlocked(player, winningTile)) {
+  if (!winningTile) {
+    return false;
+  }
+
+  if (game.mode === "riichi") {
+    return canRiichiWin(player.hand, player.melds, winningTile, { winMode: "selfDraw" });
+  }
+  if (isRonBlocked(player, winningTile)) {
     return false;
   }
   return canWin(player.hand, player.melds);
+}
+
+function hasSelfDrawOpportunity(game: CoreGame, player: CorePlayer): boolean {
+  if (player.drawnTileId) {
+    return true;
+  }
+  return (
+    player.seatIndex === game.dealerSeat &&
+    game.currentSeat === player.seatIndex &&
+    !player.firstDiscardMade &&
+    !player.firstDrawMade &&
+    player.discards.length === 0 &&
+    player.melds.length === 0
+  );
 }
 
 function canPlayerWinWithTile(game: CoreGame, player: CorePlayer, tile: Tile): boolean {

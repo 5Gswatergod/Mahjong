@@ -5,7 +5,6 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { Pool, type PoolConfig } from "pg";
 import { Server } from "socket.io";
 import { nanoid } from "nanoid";
 import { z } from "zod";
@@ -29,14 +28,14 @@ import {
   DEFAULT_GAME_CONFIG,
   type ClientToServerEvents,
   type GameMode,
-  type LegalAction,
   type PlayerSeat,
-  type PrivatePlayerState,
   type RoomSnapshot,
   type ServerToClientEvents,
   type SocketData,
   winds
 } from "@taiwan-mahjong/shared";
+import { chooseBotClaimAction, chooseBotTurnAction } from "./bot-policy.js";
+import { MemoryEventStore, PgEventStore, type EventStore, resolveDatabaseConnection } from "./event-store.js";
 
 declare module "@taiwan-mahjong/shared" {
   interface SocketData {
@@ -65,59 +64,6 @@ interface Room {
   disconnectTimers: Map<string, NodeJS.Timeout>;
   botTimer?: NodeJS.Timeout;
   autoRiichiTimer?: NodeJS.Timeout;
-}
-
-interface PersistedEvent {
-  id: string;
-  roomCode: string;
-  type: string;
-  payload: unknown;
-  createdAt: number;
-}
-
-interface EventStore {
-  init(): Promise<void>;
-  append(event: PersistedEvent): Promise<void>;
-}
-
-class MemoryEventStore implements EventStore {
-  readonly events: PersistedEvent[] = [];
-
-  async init(): Promise<void> {
-    return Promise.resolve();
-  }
-
-  async append(event: PersistedEvent): Promise<void> {
-    this.events.push(event);
-  }
-}
-
-class PgEventStore implements EventStore {
-  private readonly pool: Pool;
-
-  constructor(connection: string | PoolConfig) {
-    this.pool = typeof connection === "string" ? new Pool({ connectionString: connection }) : new Pool(connection);
-  }
-
-  async init(): Promise<void> {
-    await this.pool.query(`
-      create table if not exists mahjong_events (
-        id text primary key,
-        room_code text not null,
-        type text not null,
-        payload jsonb not null,
-        created_at timestamptz not null default now()
-      );
-      create index if not exists mahjong_events_room_code_idx on mahjong_events(room_code);
-    `);
-  }
-
-  async append(event: PersistedEvent): Promise<void> {
-    await this.pool.query(
-      "insert into mahjong_events (id, room_code, type, payload, created_at) values ($1, $2, $3, $4, to_timestamp($5 / 1000.0))",
-      [event.id, event.roomCode, event.type, JSON.stringify(event.payload), event.createdAt]
-    );
-  }
 }
 
 const currentFile = fileURLToPath(import.meta.url);
@@ -709,72 +655,6 @@ async function runBotStep(room: Room): Promise<void> {
   } catch (error) {
     io.to(room.code).emit("game.error", { message: error instanceof Error ? error.message : "Bot action failed." });
   }
-}
-
-function chooseBotClaimAction(actions: LegalAction[]): LegalAction {
-  return actions.find((action) => action.type === "win") ?? actions.find((action) => action.type === "pass") ?? actions[0]!;
-}
-
-function chooseBotTurnAction(privateState: PrivatePlayerState): LegalAction | undefined {
-  const actions = privateState.legalActions;
-  const win = actions.find((action) => action.type === "win");
-  if (win) return win;
-  const riichi = actions.find((action) => action.type === "declareRiichi");
-  if (riichi) return riichi;
-  const discards = actions.filter((action) => action.type === "discard" && action.tileId);
-  if (discards.length === 0) {
-    return actions.find((action) => action.type === "pass");
-  }
-  const handById = new Map(privateState.hand.map((tile) => [tile.id, tile]));
-  return [...discards].sort((left, right) => {
-    const leftTile = handById.get(left.tileId!);
-    const rightTile = handById.get(right.tileId!);
-    return discardScore(leftTile) - discardScore(rightTile);
-  })[0];
-}
-
-function discardScore(tile: PrivatePlayerState["hand"][number] | undefined): number {
-  if (!tile) return 0;
-  if (tile.kind === "honor") return 1;
-  if (!tile.rank) return 1;
-  const terminalPenalty = tile.rank === 1 || tile.rank === 9 ? 0 : 2;
-  const middleBonus = tile.rank >= 3 && tile.rank <= 7 ? 2 : 1;
-  return terminalPenalty + middleBonus;
-}
-
-function resolveDatabaseConnection(): string | PoolConfig | undefined {
-  if (process.env.DATABASE_URL) {
-    return process.env.DATABASE_URL;
-  }
-
-  const host = process.env.POSTGRES_HOST;
-  const database = process.env.POSTGRES_DB ?? process.env.POSTGRES_DATABASE;
-  const user = process.env.POSTGRES_USER;
-  const password = process.env.POSTGRES_PASSWORD;
-
-  if (!host || !database || !user || !password) {
-    return undefined;
-  }
-
-  const port = process.env.POSTGRES_PORT ? Number(process.env.POSTGRES_PORT) : undefined;
-  if (port !== undefined && !Number.isInteger(port)) {
-    throw new Error("POSTGRES_PORT must be an integer.");
-  }
-
-  return {
-    host,
-    database,
-    user,
-    password,
-    ...(port ? { port } : {}),
-    ...(process.env.POSTGRES_SSL === "true"
-      ? {
-          ssl: {
-            rejectUnauthorized: process.env.POSTGRES_SSL_REJECT_UNAUTHORIZED !== "false"
-          }
-        }
-      : {})
-  };
 }
 
 function snapshotRoom(room: Room): RoomSnapshot {

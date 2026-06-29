@@ -332,6 +332,76 @@ describe("engine", () => {
     expect(privateState.hand.at(-1)?.id).toBe(drawnTile.id);
   });
 
+  it("does not allow a fake self draw immediately after claiming a pong", () => {
+    const game = createGame(seats(), { random: () => 0.42 });
+    const discardTile = tile("dragon:red", 2);
+    game.currentSeat = 0;
+    game.players[0]!.hand = [discardTile];
+    game.players[1]!.hand = [
+      ...tiles([
+        "characters:1",
+        "characters:2",
+        "characters:3",
+        "characters:4",
+        "characters:5",
+        "characters:6",
+        "dots:1",
+        "dots:2",
+        "dots:3",
+        "bamboo:1",
+        "bamboo:2",
+        "bamboo:3",
+        "wind:east",
+        "wind:east"
+      ]),
+      tile("dragon:red", 0),
+      tile("dragon:red", 1)
+    ];
+    game.players[2]!.hand = [];
+    game.players[3]!.hand = [];
+
+    applyDiscard(game, 0, discardTile.id);
+    applyClaim(game, 1, "pong");
+
+    const privateState = getPrivateState(game, 1);
+    expect(privateState.legalActions.some((action) => action.type === "win")).toBe(false);
+    expect(() => applySelfDrawWin(game, 1)).toThrow();
+  });
+
+  it("places the ron tile and completed group at the right edge of the settlement hand", () => {
+    const game = createGame(seats(), { random: () => 0.42 });
+    const winningTile = tile("characters:3", 0);
+    game.currentSeat = 0;
+    game.players[0]!.hand = [winningTile];
+    game.players[1]!.hand = tiles([
+      "characters:1",
+      "characters:2",
+      "characters:4",
+      "characters:5",
+      "characters:6",
+      "dots:1",
+      "dots:2",
+      "dots:3",
+      "bamboo:1",
+      "bamboo:2",
+      "bamboo:3",
+      "dragon:red",
+      "dragon:red",
+      "dragon:red",
+      "wind:east",
+      "wind:east"
+    ]);
+    game.players[2]!.hand = [];
+    game.players[3]!.hand = [];
+
+    applyDiscard(game, 0, winningTile.id);
+    applyClaim(game, 1, "win");
+
+    const winnerHand = game.settlement?.winnerHand ?? [];
+    expect(winnerHand.slice(-3).map(tileKey)).toEqual(["characters:1", "characters:2", "characters:3"]);
+    expect(winnerHand.at(-1)?.id).toBe(winningTile.id);
+  });
+
   it("reports tenpai discards without requiring a declared ting action", () => {
     const game = createGame(seats(), { random: () => 0.42 });
     const hand = tiles([
