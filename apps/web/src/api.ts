@@ -48,6 +48,13 @@ export async function requestGuestSession(name: string | undefined): Promise<Gue
   return payload as GuestAuthResponse;
 }
 
+export async function updateGuestSessionName(token: string, name: string): Promise<GuestAuthResponse> {
+  return api<GuestAuthResponse>("/api/auth/guest", token, {
+    method: "PATCH",
+    body: JSON.stringify({ name })
+  });
+}
+
 export function saveSession(session: GuestAuthResponse): void {
   localStorage.setItem(sessionStorageKey, JSON.stringify(session));
 }

@@ -122,6 +122,33 @@ fastify.post("/api/auth/guest", async (request) => {
   return session;
 });
 
+fastify.patch("/api/auth/guest", async (request, reply) => {
+  const session = authenticateRequest(request.headers.authorization);
+  if (!session) {
+    return reply.code(401).send({ message: "Missing or invalid guest token." });
+  }
+
+  const body = z.object({ name: z.string().trim().min(1).max(20) }).parse(request.body ?? {});
+  session.name = body.name;
+
+  for (const room of rooms.values()) {
+    const seat = room.seats.find((candidate) => candidate.playerId === session.playerId);
+    if (!seat || seat.isBot) {
+      continue;
+    }
+
+    seat.name = session.name;
+    if (room.game?.players[seat.seatIndex]) {
+      room.game.players[seat.seatIndex]!.name = session.name;
+    }
+    room.updatedAt = Date.now();
+    await persist(room.code, "player.renamed", { playerId: session.playerId, name: session.name });
+    broadcastRoom(room);
+  }
+
+  return session;
+});
+
 fastify.post("/api/rooms", async (request, reply) => {
   const session = authenticateRequest(request.headers.authorization);
   if (!session) {

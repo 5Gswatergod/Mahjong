@@ -16,6 +16,7 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  min-height: 100dvh;
   overflow-x: hidden;
 }
 
@@ -35,6 +36,7 @@ button:disabled {
 
 .appShell {
   min-height: 100vh;
+  min-height: 100dvh;
   color: #f7f1df;
 }
 
@@ -229,6 +231,53 @@ input {
   border-radius: 8px;
 }
 
+.identity span,
+.identity strong {
+  min-width: 0;
+}
+
+.identity strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.identity .smallIconButton {
+  flex: 0 0 auto;
+  color: #293242;
+  background: #fffdf5;
+  border-color: #cfc3aa;
+}
+
+.identity .smallIconButton.danger {
+  color: #9d3f35;
+}
+
+.identityEditor {
+  min-height: 64px;
+  padding: 8px 10px 8px 12px;
+}
+
+.identityNameField {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: grid;
+  gap: 5px;
+  color: #293242;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.identityNameField input {
+  min-height: 36px;
+}
+
+.identityEditActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .modePicker {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -307,6 +356,7 @@ input {
 .gameExperience {
   position: relative;
   min-height: calc(100vh - 24px);
+  min-height: calc(100dvh - 24px);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: 12px;
@@ -2125,6 +2175,143 @@ input {
   }
 }
 
+@media (min-width: 861px) and (max-width: 1366px) and (orientation: landscape) {
+  .gameAppShell {
+    padding: 10px 10px calc(10px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .gameExperience {
+    min-height: calc(100dvh - 20px - env(safe-area-inset-bottom, 0px));
+    gap: 8px;
+  }
+
+  .activeGameScene .boardStack {
+    width: 100%;
+    grid-template-rows: minmax(560px, 1fr) auto auto;
+    gap: 8px;
+  }
+
+  .activeGameScene .gameBoard {
+    min-height: 560px;
+  }
+
+  .riverLane {
+    gap: 3px;
+  }
+
+  .river0 {
+    bottom: 21%;
+    max-width: 214px;
+  }
+
+  .river2 {
+    top: 19%;
+    max-width: 214px;
+  }
+
+  .river1 {
+    right: 24%;
+    width: 214px;
+  }
+
+  .river3 {
+    left: 24%;
+    width: 214px;
+  }
+
+  .riverLane .miniTile {
+    width: 24px;
+    min-width: 24px;
+    height: 34px;
+    border-radius: 4px;
+  }
+
+  .centerConsole {
+    top: 53%;
+    width: 160px;
+    min-height: 140px;
+    padding: 18px 14px 13px;
+    gap: 5px;
+  }
+
+  .windMarker {
+    width: 30px;
+    height: 27px;
+    font-size: 12px;
+  }
+
+  .markerTop {
+    top: -15px;
+  }
+
+  .markerRight {
+    right: -15px;
+  }
+
+  .markerBottom {
+    bottom: -15px;
+  }
+
+  .markerLeft {
+    left: -15px;
+  }
+
+  .roundDial {
+    gap: 3px;
+  }
+
+  .roundDial span,
+  .roundDial strong,
+  .lastDiscardLabel {
+    padding: 3px 4px;
+    font-size: 10px;
+  }
+
+  .centerPoints strong {
+    font-size: 21px;
+  }
+
+  .centerPoints span {
+    font-size: 10px;
+  }
+
+  .turnCountdown {
+    min-width: 104px;
+    min-height: 42px;
+    padding: 4px 6px;
+    gap: 6px;
+  }
+
+  .timerRing {
+    width: 31px;
+    height: 31px;
+  }
+
+  .timerMeta strong {
+    font-size: 11px;
+  }
+
+  .timerMeta span {
+    font-size: 10px;
+  }
+
+  .centerDora .miniTile {
+    width: 20px;
+    min-width: 20px;
+    height: 28px;
+  }
+
+  .lastDiscard .miniTile {
+    width: 28px;
+    min-width: 28px;
+    height: 40px;
+  }
+
+  .handDock {
+    padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
 @media (max-width: 860px) {
   .gameAppShell {
     padding: 8px;
@@ -2132,6 +2319,7 @@ input {
 
   .gameExperience {
     min-height: calc(100vh - 16px);
+    min-height: calc(100dvh - 16px);
   }
 
   .gameHeader {
@@ -2385,6 +2573,7 @@ input {
 
   .gameExperience {
     min-height: calc(100vh - 12px);
+    min-height: calc(100dvh - 12px);
     gap: 6px;
   }
 
@@ -2524,5 +2713,148 @@ input {
   .settlementActions .readyButton,
   .settlementActions .secondaryButton {
     width: 100%;
+  }
+}
+
+.scaledTableBoard {
+  --table-stage-width: 1280px;
+  --table-stage-height: 560px;
+  --table-stage-scale: 1;
+}
+
+.tableStage {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--table-stage-width);
+  height: var(--table-stage-height);
+  transform: translate(-50%, -50%) scale(var(--table-stage-scale));
+  transform-origin: center;
+}
+
+@media (min-width: 861px) {
+  .scaledTableBoard .riverLane {
+    gap: 4px;
+  }
+
+  .scaledTableBoard .river0 {
+    bottom: 30%;
+    max-width: 270px;
+  }
+
+  .scaledTableBoard .river2 {
+    top: 28%;
+    max-width: 270px;
+  }
+
+  .scaledTableBoard .river1 {
+    right: 31%;
+    width: 250px;
+  }
+
+  .scaledTableBoard .river3 {
+    left: 31%;
+    width: 250px;
+  }
+
+  .scaledTableBoard .riverLane .miniTile {
+    width: 28px;
+    min-width: 28px;
+    height: 39px;
+    border-radius: 5px;
+  }
+
+  .scaledTableBoard .centerConsole {
+    left: 50%;
+    top: 52%;
+    width: 172px;
+    min-height: 156px;
+    padding: 22px 18px 16px;
+    gap: 6px;
+    transform: translate(-50%, -50%);
+  }
+
+  .scaledTableBoard .windMarker {
+    width: 34px;
+    height: 30px;
+    font-size: inherit;
+  }
+
+  .scaledTableBoard .markerTop {
+    top: -18px;
+  }
+
+  .scaledTableBoard .markerRight {
+    right: -18px;
+  }
+
+  .scaledTableBoard .markerBottom {
+    bottom: -18px;
+  }
+
+  .scaledTableBoard .markerLeft {
+    left: -18px;
+  }
+
+  .scaledTableBoard .roundDial {
+    gap: 4px;
+  }
+
+  .scaledTableBoard .roundDial span,
+  .scaledTableBoard .roundDial strong,
+  .scaledTableBoard .lastDiscardLabel {
+    padding: 4px 6px;
+    font-size: 11px;
+  }
+
+  .scaledTableBoard .centerPoints strong {
+    font-size: 22px;
+  }
+
+  .scaledTableBoard .centerPoints span {
+    font-size: 11px;
+  }
+
+  .scaledTableBoard .turnCountdown {
+    min-width: 114px;
+    min-height: 44px;
+    padding: 5px 7px;
+    gap: 8px;
+  }
+
+  .scaledTableBoard .timerRing {
+    width: 32px;
+    height: 32px;
+  }
+
+  .scaledTableBoard .timerMeta strong {
+    font-size: 12px;
+  }
+
+  .scaledTableBoard .timerMeta span {
+    font-size: 11px;
+  }
+
+  .scaledTableBoard .centerDora .miniTile {
+    width: 22px;
+    min-width: 22px;
+    height: 31px;
+  }
+
+  .scaledTableBoard .lastDiscard .miniTile {
+    width: 34px;
+    min-width: 34px;
+    height: 48px;
+  }
+}
+
+@media (max-width: 860px) {
+  .scaledTableBoard .tableStage {
+    inset: 0;
+    left: auto;
+    top: auto;
+    width: 100%;
+    height: 100%;
+    transform: none;
   }
 }

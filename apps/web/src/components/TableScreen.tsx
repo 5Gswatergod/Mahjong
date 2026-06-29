@@ -1,9 +1,12 @@
-import { type CSSProperties } from "react";
+import { type CSSProperties, useLayoutEffect, useRef, useState } from "react";
 import { Bot, RefreshCw } from "lucide-react";
 import type { GameState, PublicPlayerState, RoomSnapshot } from "@taiwan-mahjong/shared";
 import { modeLabels, windLabels } from "../constants";
 import { activeDeadline, formatLatency, formatPoints, initials, phaseLabel } from "../utils/labels";
 import { MiniTile, TileBacks } from "./Tiles";
+
+const tableStageWidth = 1280;
+const tableStageHeight = 560;
 
 export function TableScreen({
   room,
@@ -20,6 +23,8 @@ export function TableScreen({
   serverNow: number;
   latencyMs: number | null;
 }) {
+  const tableFit = useTableStageFit(Boolean(game));
+
   if (!game) {
     return (
       <div className="gameBoard tableEmptyBoard">
@@ -51,7 +56,8 @@ export function TableScreen({
   const leftPlayer = orderedSeats.find(({ distance }) => distance === 3)?.player;
 
   return (
-    <div className={myTurn ? "gameBoard myTurn" : "gameBoard"}>
+    <div ref={tableFit.boardRef} className={myTurn ? "gameBoard scaledTableBoard myTurn" : "gameBoard scaledTableBoard"} style={tableFit.style}>
+      <div className="tableStage">
       <div className="tableFelt" aria-hidden="true">
         <span className="feltGuide guideTop" />
         <span className="feltGuide guideRight" />
@@ -114,8 +120,44 @@ export function TableScreen({
           </div>
         )}
       </div>
+      </div>
     </div>
   );
+}
+
+function useTableStageFit(enabled: boolean) {
+  const boardRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+
+  useLayoutEffect(() => {
+    if (!enabled || !boardRef.current) return;
+
+    const board = boardRef.current;
+    const updateScale = () => {
+      const width = board.clientWidth;
+      const height = board.clientHeight;
+      if (width === 0 || height === 0) return;
+
+      const nextScale = Math.min(width / tableStageWidth, height / tableStageHeight);
+      setScale(Math.max(0.25, Math.min(1.15, Number(nextScale.toFixed(4)))));
+    };
+
+    updateScale();
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", updateScale);
+      return () => window.removeEventListener("resize", updateScale);
+    }
+
+    const observer = new ResizeObserver(updateScale);
+    observer.observe(board);
+    return () => observer.disconnect();
+  }, [enabled]);
+
+  return {
+    boardRef,
+    style: { "--table-stage-scale": String(scale) } as CSSProperties
+  };
 }
 
 function PlayerSpot({

@@ -1,5 +1,5 @@
-import { BookOpen, Copy, DoorOpen, Loader2, Play, Send, Shuffle, WifiOff, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { BookOpen, Copy, DoorOpen, Loader2, Pencil, Play, Save, Send, Shuffle, WifiOff, X } from "lucide-react";
+import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 import {
   type ClientToServerEvents,
@@ -21,7 +21,7 @@ import { RoomLobby } from "./components/RoomLobby";
 import { defaultRoomConfig, RoomSettingsPanel } from "./components/RoomSettingsPanel";
 import { SettlementOverlay } from "./components/SettlementOverlay";
 import { TableScreen } from "./components/TableScreen";
-import { AuthExpiredError, api, clearSession, readSession, requestGuestSession, saveSession } from "./api";
+import { AuthExpiredError, api, clearSession, readSession, requestGuestSession, saveSession, updateGuestSessionName } from "./api";
 import { modeLabels, windFullLabels } from "./constants";
 import { buildActionHintIds } from "./utils/actions";
 import { phaseLabel } from "./utils/labels";
@@ -33,6 +33,7 @@ export function App() {
   const [session, setSession] = useState<GuestAuthResponse | null>(() => readSession());
   const [guestName, setGuestName] = useState("");
   const [joinCode, setJoinCode] = useState("");
+  const [profileNameDraft, setProfileNameDraft] = useState("");
   const [selectedMode, setSelectedMode] = useState<GameMode>("taiwan");
   const [roomConfig, setRoomConfig] = useState<GameConfig>(() => defaultRoomConfig("taiwan"));
   const [room, setRoom] = useState<RoomSnapshot | null>(null);
@@ -43,6 +44,8 @@ export function App() {
   const [socket, setSocket] = useState<MahjongSocket | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [renamingName, setRenamingName] = useState(false);
+  const [savingName, setSavingName] = useState(false);
   const [selectedTileId, setSelectedTileId] = useState<string | null>(null);
   const [dismissedSettlementHandId, setDismissedSettlementHandId] = useState<string | null>(null);
   const [showPatternCatalog, setShowPatternCatalog] = useState(false);
@@ -93,6 +96,12 @@ export function App() {
   useEffect(() => {
     setRoomConfig(defaultRoomConfig(selectedMode));
   }, [selectedMode]);
+
+  useEffect(() => {
+    if (session && !renamingName) {
+      setProfileNameDraft(session.name);
+    }
+  }, [renamingName, session]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setClockMs(Date.now()), 250);
@@ -277,6 +286,79 @@ export function App() {
     }
   }, [applyServerTime, handleAuthExpired, joinCode, runWithFreshSession, session]);
 
+  const saveProfileName = useCallback(
+    async (event?: FormEvent) => {
+      event?.preventDefault();
+      if (!session || savingName) return;
+
+      const nextName = profileNameDraft.trim();
+      if (!nextName) {
+        setError("請輸入名字。");
+        return;
+      }
+      if (nextName === session.name) {
+        setRenamingName(false);
+        setProfileNameDraft(session.name);
+        return;
+      }
+
+      setSavingName(true);
+      setError("");
+      try {
+        const updatedSession = await runWithFreshSession((activeSession) => updateGuestSessionName(activeSession.token, nextName));
+        saveSession(updatedSession);
+        setSession(updatedSession);
+        setGuestName(updatedSession.name);
+        setProfileNameDraft(updatedSession.name);
+        setRenamingName(false);
+
+        setRoom((currentRoom) => {
+          if (!currentRoom) return currentRoom;
+          return {
+            ...currentRoom,
+            seats: currentRoom.seats.map((seat) =>
+              seat.playerId === updatedSession.playerId ? { ...seat, name: updatedSession.name } : seat
+            ),
+            ...(currentRoom.game
+              ? {
+                  game: {
+                    ...currentRoom.game,
+                    players: currentRoom.game.players.map((player) =>
+                      player.playerId === updatedSession.playerId ? { ...player, name: updatedSession.name } : player
+                    )
+                  }
+                }
+              : {})
+          };
+        });
+        setGame((currentGame) =>
+          currentGame
+            ? {
+                ...currentGame,
+                players: currentGame.players.map((player) =>
+                  player.playerId === updatedSession.playerId ? { ...player, name: updatedSession.name } : player
+                )
+              }
+            : currentGame
+        );
+      } catch (caught) {
+        if (caught instanceof AuthExpiredError) {
+          handleAuthExpired();
+          return;
+        }
+        setError(caught instanceof Error ? caught.message : "更新名字失敗。");
+      } finally {
+        setSavingName(false);
+      }
+    },
+    [handleAuthExpired, profileNameDraft, runWithFreshSession, savingName, session]
+  );
+
+  const cancelProfileRename = useCallback(() => {
+    setProfileNameDraft(session?.name ?? "");
+    setRenamingName(false);
+  }, [session?.name]);
+
   const toggleReady = useCallback(() => {
     if (!socket || !mySeat) return;
     socket.emit("room.ready", { ready: !mySeat.ready });
@@ -367,6 +449,48 @@ export function App() {
     await navigator.clipboard.writeText(room.code);
   }, [room]);
 
+  const identityControl = session ? (
+    renamingName ? (
+      <form className="identity identityEditor" onSubmit={saveProfileName}>
+        <label className="identityNameField">
+          <span>目前身分</span>
+          <input
+            value={profileNameDraft}
+            maxLength={20}
+            onChange={(event) => setProfileNameDraft(event.target.value)}
+            placeholder="輸入新的名字"
+            autoComplete="nickname"
+            autoFocus
+          />
+        </label>
+        <div className="identityEditActions">
+          <button className="smallIconButton" type="submit" disabled={savingName || !profileNameDraft.trim()} title="儲存名字">
+            {savingName ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
+          </button>
+          <button className="smallIconButton danger" type="button" onClick={cancelProfileRename} disabled={savingName} title="取消">
+            <X size={16} />
+          </button>
+        </div>
+      </form>
+    ) : (
+      <div className="identity">
+        <span>目前身分</span>
+        <strong>{session.name}</strong>
+        <button
+          className="smallIconButton"
+          type="button"
+          onClick={() => {
+            setProfileNameDraft(session.name);
+            setRenamingName(true);
+          }}
+          title="更改名字"
+        >
+          <Pencil size={16} />
+        </button>
+      </div>
+    )
+  ) : null;
+
   return (
     <main className={room ? (activeGame ? "appShell gameAppShell" : "appShell roomLobbyShell") : "appShell lobbyAppShell"}>
       {error && (
@@ -401,10 +525,7 @@ export function App() {
 
       {session && !room && (
         <section className="entryPanel lobbyPanel">
-          <div className="identity">
-            <span>目前身分</span>
-            <strong>{session.name}</strong>
-          </div>
+          {identityControl}
           <div className="modePicker" role="group" aria-label="選擇玩法">
             {(["taiwan", "riichi"] as const).map((mode) => (
               <button key={mode} className={selectedMode === mode ? "modeOption active" : "modeOption"} onClick={() => setSelectedMode(mode)}>
@@ -485,6 +606,7 @@ export function App() {
               onReady={toggleReady}
               onAddBot={addBot}
               onClearSeat={clearSeat}
+              identityControl={identityControl}
               serverNow={serverNow}
               latencyMs={latencyMs}
             />

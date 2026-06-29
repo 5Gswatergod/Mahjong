@@ -1,3 +1,4 @@
+import { type ReactNode } from "react";
 import { Check, Clock, Sparkles } from "lucide-react";
 import type { GameState, RoomSnapshot } from "@taiwan-mahjong/shared";
 import { modeLabels } from "../constants";
@@ -15,6 +16,7 @@ export function RoomLobby({
   onReady,
   onAddBot,
   onClearSeat,
+  identityControl,
   serverNow,
   latencyMs
 }: {
@@ -27,6 +29,7 @@ export function RoomLobby({
   onReady: () => void;
   onAddBot: (seatIndex: number) => void;
   onClearSeat: (seatIndex: number) => void;
+  identityControl?: ReactNode;
   serverNow: number;
   latencyMs: number | null;
 }) {
@@ -37,6 +40,7 @@ export function RoomLobby({
   return (
     <div className="roomLobby">
       <div className="lobbySide">
+        {identityControl}
         <SeatManager
           room={room}
           game={game}
