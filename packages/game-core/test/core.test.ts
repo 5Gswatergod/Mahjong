@@ -3,6 +3,7 @@ import type { Meld, PlayerSeat, Tile } from "@taiwan-mahjong/shared";
 import {
   applyClaim,
   applyDiscard,
+  applyKong,
   applySelfDrawWin,
   applyDeclareRiichi,
   autoRiichiDiscardIfNeeded,
@@ -187,7 +188,7 @@ describe("scoring", () => {
     expect(result.payments[0]?.tai).toBeGreaterThan(result.baseTai);
   });
 
-  it("uses the documented Taiwan tai values for major hands", () => {
+  it("uses GameTower Taiwan tai values for major hands", () => {
     const allHonors = tiles([
       "wind:east",
       "wind:east",
@@ -258,11 +259,109 @@ describe("scoring", () => {
         { winnerSeat: 0, winMode: "discard", winningTile: hand.at(-1)!, fromSeat: 1, responsibilitySeat: 1 }
       );
 
-    expect(score(allHonors).patterns.find((pattern) => pattern.id === "all-honors")?.tai).toBe(16);
-    expect(score(cleanOneSuit).patterns.find((pattern) => pattern.id === "clean-one-suit")?.tai).toBe(12);
-    expect(score(fiveConcealedTriplets).patterns.find((pattern) => pattern.id === "five-concealed-triplets")?.tai).toBe(13);
+    expect(score(allHonors).patterns.map((pattern) => pattern.id)).not.toContain("all-honors");
+    expect(score(allHonors).patterns.find((pattern) => pattern.id === "clean-one-suit")?.tai).toBe(8);
+    expect(score(cleanOneSuit).patterns.find((pattern) => pattern.id === "clean-one-suit")?.tai).toBe(8);
+    expect(score(fiveConcealedTriplets).patterns.find((pattern) => pattern.id === "five-concealed-triplets")?.tai).toBe(8);
     expect(score(fiveConcealedTriplets).patterns.map((pattern) => pattern.id)).not.toContain("all-pongs");
     expect(score(fiveConcealedTriplets).patterns.map((pattern) => pattern.id)).not.toContain("menqing");
+  });
+
+  it("scores GameTower visible flower, visible wind, and no-honor-no-flower rules", () => {
+    const noHonorHand = tiles([
+      "characters:1",
+      "characters:2",
+      "characters:3",
+      "characters:1",
+      "characters:2",
+      "characters:3",
+      "characters:4",
+      "characters:5",
+      "characters:6",
+      "characters:4",
+      "characters:5",
+      "characters:6",
+      "characters:7",
+      "characters:8",
+      "characters:9",
+      "characters:9",
+      "characters:9"
+    ]);
+    const windHand = tiles([
+      "characters:1",
+      "characters:2",
+      "characters:3",
+      "characters:4",
+      "characters:5",
+      "characters:6",
+      "characters:7",
+      "characters:8",
+      "characters:9",
+      "dots:1",
+      "dots:2",
+      "dots:3",
+      "wind:south",
+      "wind:south",
+      "wind:south",
+      "dragon:red",
+      "dragon:red"
+    ]);
+    const flowers = buildWall().filter((candidate) => candidate.kind === "flower").slice(0, 3);
+
+    const score = (hand: Tile[], scoredFlowers: Tile[] = []) =>
+      calculateScore(
+        [
+          { seatIndex: 0, wind: "east", hand, flowers: scoredFlowers, melds: [], declaredTing: false, declaredEarthTing: false },
+          { seatIndex: 1, wind: "south", hand: [], flowers: [], melds: [], declaredTing: false, declaredEarthTing: false },
+          { seatIndex: 2, wind: "west", hand: [], flowers: [], melds: [], declaredTing: false, declaredEarthTing: false },
+          { seatIndex: 3, wind: "north", hand: [], flowers: [], melds: [], declaredTing: false, declaredEarthTing: false }
+        ],
+        { handId: "visible", dealerSeat: 1, roundWind: "east", dealerStreak: 0 },
+        { winnerSeat: 0, winMode: "discard", winningTile: hand.at(-1)!, fromSeat: 1, responsibilitySeat: 1 }
+      );
+
+    expect(score(noHonorHand).patterns.find((pattern) => pattern.id === "ping-hu")?.tai).toBe(2);
+    expect(score(noHonorHand).patterns.find((pattern) => pattern.id === "no-honors-no-flowers")?.tai).toBe(2);
+    expect(score(noHonorHand, flowers).patterns.find((pattern) => pattern.id === "visible-flowers")?.tai).toBe(3);
+    expect(score(windHand).patterns.find((pattern) => pattern.id === "wind-triplet-wind:south")?.tai).toBe(1);
+  });
+
+  it("scores GameTower kong and special ting rules", () => {
+    const hand = tiles([
+      "characters:1",
+      "characters:2",
+      "characters:3",
+      "characters:4",
+      "characters:5",
+      "characters:6",
+      "characters:7",
+      "characters:8",
+      "characters:9",
+      "dots:2",
+      "dots:2"
+    ]);
+    const exposedKongTiles = tiles(["dragon:red", "dragon:red", "dragon:red", "dragon:red"]);
+    const concealedKongTiles = tiles(["wind:south", "wind:south", "wind:south", "wind:south"]);
+    const melds: Meld[] = [
+      { id: "meld_exposed", type: "exposedKong", tiles: exposedKongTiles, claimedTileId: exposedKongTiles[0]!.id, fromSeat: 1, concealed: false },
+      { id: "meld_concealed", type: "concealedKong", tiles: concealedKongTiles, claimedTileId: concealedKongTiles[0]!.id, fromSeat: 0, concealed: true }
+    ];
+
+    const result = calculateScore(
+      [
+        { seatIndex: 0, wind: "east", hand, flowers: [], melds, declaredTing: true, declaredHeavenTing: true, declaredEarthTing: false },
+        { seatIndex: 1, wind: "south", hand: [], flowers: [], melds: [], declaredTing: false, declaredEarthTing: false },
+        { seatIndex: 2, wind: "west", hand: [], flowers: [], melds: [], declaredTing: false, declaredEarthTing: false },
+        { seatIndex: 3, wind: "north", hand: [], flowers: [], melds: [], declaredTing: false, declaredEarthTing: false }
+      ],
+      { handId: "kong", dealerSeat: 0, roundWind: "east", dealerStreak: 0 },
+      { winnerSeat: 0, winMode: "discard", winningTile: hand.at(-1)!, fromSeat: 1, responsibilitySeat: 1 }
+    );
+
+    expect(result.patterns.find((pattern) => pattern.id === "kong-meld_exposed")?.tai).toBe(1);
+    expect(result.patterns.find((pattern) => pattern.id === "concealed-kong-meld_concealed")?.tai).toBe(2);
+    expect(result.patterns.find((pattern) => pattern.id === "heaven-ting")?.tai).toBe(8);
+    expect(result.patterns.map((pattern) => pattern.id)).not.toContain("declared-ting");
   });
 });
 
@@ -359,13 +458,89 @@ describe("engine", () => {
     ];
     game.players[2]!.hand = [];
     game.players[3]!.hand = [];
+    const staleDrawnTile = tile("bamboo:9", 0);
+    game.players[1]!.hand.push(staleDrawnTile);
 
     applyDiscard(game, 0, discardTile.id);
+    const wallLengthAfterDiscard = game.wall.length;
+    game.players[1]!.drawnTileId = staleDrawnTile.id;
     applyClaim(game, 1, "pong");
 
     const privateState = getPrivateState(game, 1);
+    expect(game.currentSeat).toBe(1);
+    expect(game.players[1]!.hand).toHaveLength(14);
+    expect(game.players[1]!.drawnTileId).toBeUndefined();
+    expect(game.wall).toHaveLength(wallLengthAfterDiscard);
+    expect(privateState.drawnTileId).toBeUndefined();
+    expect(privateState.hand).toHaveLength(14);
+    expect(privateState.legalActions.some((action) => action.type === "win")).toBe(false);
+    expect(privateState.legalActions.every((action) => action.type === "discard")).toBe(true);
+    expect(() => applySelfDrawWin(game, 1)).toThrow();
+
+    const discardAfterPong = privateState.legalActions.find((action) => action.type === "discard" && action.tileId);
+    expect(discardAfterPong?.tileId).toBeTruthy();
+    applyDiscard(game, 1, discardAfterPong!.tileId!);
+    expect(game.players[1]!.hand).toHaveLength(13);
+    expect(game.players[1]!.drawnTileId).toBeUndefined();
+    expect(game.currentSeat).toBe(2);
+    expect(game.players[2]!.hand).toHaveLength(1);
+    expect(game.players[2]!.drawnTileId).toBe(game.players[2]!.hand[0]!.id);
+  });
+
+  it("does not draw a tile after claiming a chow", () => {
+    const game = createGame(seats(), { random: () => 0.42 });
+    const discardTile = tile("characters:2", 2);
+    const chowLeft = tile("characters:1", 0);
+    const chowRight = tile("characters:3", 0);
+    const staleDrawnTile = tile("bamboo:9", 0);
+    game.currentSeat = 0;
+    game.players[0]!.hand = [discardTile];
+    game.players[1]!.hand = [
+      chowLeft,
+      chowRight,
+      staleDrawnTile,
+      ...tiles([
+        "characters:4",
+        "characters:5",
+        "characters:6",
+        "dots:1",
+        "dots:2",
+        "dots:3",
+        "bamboo:1",
+        "bamboo:2",
+        "bamboo:3",
+        "dragon:red",
+        "dragon:red",
+        "dragon:green",
+        "dragon:green",
+        "wind:east"
+      ])
+    ];
+    game.players[2]!.hand = [];
+    game.players[3]!.hand = [];
+
+    applyDiscard(game, 0, discardTile.id);
+    const wallLengthAfterDiscard = game.wall.length;
+    game.players[1]!.drawnTileId = staleDrawnTile.id;
+    applyClaim(game, 1, "chow", [chowLeft.id, chowRight.id]);
+
+    const privateState = getPrivateState(game, 1);
+    expect(game.currentSeat).toBe(1);
+    expect(game.players[1]!.hand).toHaveLength(14);
+    expect(game.players[1]!.drawnTileId).toBeUndefined();
+    expect(game.wall).toHaveLength(wallLengthAfterDiscard);
+    expect(privateState.drawnTileId).toBeUndefined();
     expect(privateState.legalActions.some((action) => action.type === "win")).toBe(false);
     expect(() => applySelfDrawWin(game, 1)).toThrow();
+
+    const discardAfterChow = privateState.legalActions.find((action) => action.type === "discard" && action.tileId);
+    expect(discardAfterChow?.tileId).toBeTruthy();
+    applyDiscard(game, 1, discardAfterChow!.tileId!);
+    expect(game.players[1]!.hand).toHaveLength(13);
+    expect(game.players[1]!.drawnTileId).toBeUndefined();
+    expect(game.currentSeat).toBe(2);
+    expect(game.players[2]!.hand).toHaveLength(1);
+    expect(game.players[2]!.drawnTileId).toBe(game.players[2]!.hand[0]!.id);
   });
 
   it("places the ron tile and completed group at the right edge of the settlement hand", () => {
@@ -704,6 +879,123 @@ describe("engine", () => {
     const action = getPrivateState(game, 0).legalActions.find((candidate) => candidate.type === "kong" && candidate.meldId === "meld_pong_red");
 
     expect(action?.tileIds).toEqual([addTile.id]);
+  });
+
+  it("draws a supplement tile after claiming an exposed kong", () => {
+    const game = createGame(seats(), { random: () => 0.42 });
+    const discardTile = tile("dragon:red", 3);
+    const supplementTile = tile("dots:9", 3);
+    game.currentSeat = 0;
+    game.players[0]!.hand = [discardTile];
+    game.players[1]!.hand = [
+      ...tiles(["dragon:red", "dragon:red", "dragon:red"]),
+      ...tiles([
+        "characters:1",
+        "characters:2",
+        "characters:3",
+        "dots:1",
+        "dots:2",
+        "dots:3",
+        "bamboo:1",
+        "bamboo:2",
+        "bamboo:3",
+        "wind:east",
+        "wind:south",
+        "wind:west",
+        "wind:north"
+      ])
+    ];
+    game.players[2]!.hand = [];
+    game.players[3]!.hand = [];
+    game.wall = [
+      ...tiles([
+        "characters:4",
+        "characters:5",
+        "characters:6",
+        "characters:7",
+        "characters:8",
+        "characters:9",
+        "dots:4",
+        "dots:5",
+        "dots:6",
+        "bamboo:4",
+        "bamboo:5",
+        "bamboo:6",
+        "dragon:green",
+        "dragon:green",
+        "dragon:white",
+        "dragon:white"
+      ]),
+      supplementTile
+    ];
+
+    applyDiscard(game, 0, discardTile.id);
+    const wallLengthAfterDiscard = game.wall.length;
+    applyClaim(game, 1, "kong");
+
+    expect(game.currentSeat).toBe(1);
+    expect(game.players[1]!.melds.at(-1)?.type).toBe("exposedKong");
+    expect(game.players[1]!.hand).toHaveLength(14);
+    expect(game.players[1]!.drawnTileId).toBe(`supplement:${supplementTile.id}`);
+    expect(game.players[1]!.hand.some((candidate) => candidate.id === supplementTile.id)).toBe(true);
+    expect(game.wall).toHaveLength(wallLengthAfterDiscard - 1);
+  });
+
+  it("draws a supplement tile after declaring a concealed kong", () => {
+    const game = createGame(seats(), { random: () => 0.42 });
+    const kongTiles = tiles(["dragon:red", "dragon:red", "dragon:red", "dragon:red"]);
+    const supplementTile = tile("dots:9", 3);
+    game.currentSeat = 0;
+    game.players[0]!.hand = [
+      ...kongTiles,
+      ...tiles([
+        "characters:1",
+        "characters:2",
+        "characters:3",
+        "characters:4",
+        "characters:5",
+        "characters:6",
+        "dots:1",
+        "dots:2",
+        "dots:3",
+        "bamboo:1",
+        "bamboo:2",
+        "bamboo:3",
+        "wind:east"
+      ])
+    ];
+    game.players[0]!.drawnTileId = kongTiles.at(-1)!.id;
+    game.wall = [
+      ...tiles([
+        "characters:7",
+        "characters:8",
+        "characters:9",
+        "dots:4",
+        "dots:5",
+        "dots:6",
+        "bamboo:4",
+        "bamboo:5",
+        "bamboo:6",
+        "dragon:green",
+        "dragon:green",
+        "dragon:white",
+        "dragon:white",
+        "wind:south",
+        "wind:west",
+        "wind:north"
+      ]),
+      supplementTile
+    ];
+    const wallLengthBeforeKong = game.wall.length;
+
+    applyKong(game, 0, kongTiles.map((candidate) => candidate.id));
+
+    expect(game.currentSeat).toBe(0);
+    expect(game.players[0]!.melds.at(-1)?.type).toBe("concealedKong");
+    expect(game.players[0]!.hand).toHaveLength(14);
+    expect(game.players[0]!.drawnTileId).toBe(`supplement:${supplementTile.id}`);
+    expect(game.players[0]!.hand.some((candidate) => candidate.id === supplementTile.id)).toBe(true);
+    expect(game.wall).toHaveLength(wallLengthBeforeKong - 1);
   });
 
   it("auto-discards a drawn tile after riichi when self draw is not available", () => {

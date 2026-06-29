@@ -55,6 +55,13 @@ button:disabled {
     linear-gradient(135deg, #070a13, #111a25 46%, #0b101b);
 }
 
+.roomLobbyShell {
+  padding: 12px;
+  background:
+    linear-gradient(120deg, rgba(7, 10, 18, 0.9), rgba(12, 25, 38, 0.78)),
+    url("/backgrounds/game-table-bg.png") center / cover fixed;
+}
+
 .notice {
   position: fixed;
   left: 50%;
@@ -243,6 +250,56 @@ input {
   border-color: #1f6f8b;
 }
 
+.roomSettingsPanel {
+  padding-top: 4px;
+  display: grid;
+  gap: 12px;
+}
+
+.settingsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.settingField {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  color: #293242;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.settingInput {
+  position: relative;
+  min-width: 0;
+}
+
+.settingInput input {
+  padding-right: 40px;
+}
+
+.settingInput em {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  color: #667082;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 900;
+  transform: translateY(-50%);
+}
+
+.subtleButton {
+  justify-self: start;
+  min-height: 36px;
+  color: #293242;
+  background: #f1ead9;
+  box-shadow: none;
+  border: 1px solid #cfc3aa;
+}
+
 .joinBox {
   grid-template-columns: minmax(0, 1fr) auto;
 }
@@ -312,8 +369,81 @@ input {
 .gameScene {
   min-height: 0;
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr) 260px;
+  grid-template-columns: 220px minmax(0, 1fr) 220px;
   gap: 12px;
+}
+
+.activeGameScene {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.activeGameScene .boardStack {
+  width: min(1380px, 100%);
+  margin: 0 auto;
+  grid-template-rows: minmax(540px, 1fr) auto auto;
+}
+
+.activeGameScene .gameBoard {
+  min-height: 540px;
+}
+
+.roomLobby {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.lobbySide,
+.lobbyTableArea {
+  min-width: 0;
+  min-height: 0;
+}
+
+.lobbySide {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.lobbyTableArea {
+  display: grid;
+  grid-template-rows: minmax(430px, 1fr) auto;
+  gap: 10px;
+}
+
+.lobbyReadyBar {
+  min-height: 86px;
+  padding: 12px;
+  display: grid;
+  grid-template-columns: minmax(140px, 180px) minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  background: rgba(7, 10, 18, 0.82);
+  border: 1px solid rgba(233, 198, 114, 0.24);
+  border-radius: 8px;
+  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.26);
+}
+
+.lobbyReadyCopy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.lobbyReadyCopy strong {
+  color: #f4d887;
+  font-size: 20px;
+}
+
+.lobbyReadyCopy span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #c5ced8;
+  font-size: 13px;
+  font-weight: 900;
 }
 
 .seatManager,
@@ -325,7 +455,8 @@ input {
 }
 
 .seatManager,
-.infoPanel {
+.infoPanel,
+.lobbyInfoPanel {
   padding: 12px;
   background: rgba(12, 18, 31, 0.74);
   border: 1px solid rgba(233, 198, 114, 0.22);
@@ -697,6 +828,24 @@ input {
   font-weight: 900;
 }
 
+.playerSpotStats {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+}
+
+.playerSpotStats span {
+  min-height: 20px;
+  padding: 3px 6px;
+  color: #dbe4e8;
+  background: rgba(7, 10, 18, 0.56);
+  border: 1px solid rgba(255, 232, 178, 0.12);
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 900;
+}
+
 .opponentWall {
   display: flex;
   justify-content: center;
@@ -889,11 +1038,363 @@ input {
   gap: 5px;
 }
 
+.centerDora {
+  max-width: 100%;
+  padding: 4px 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  overflow: hidden;
+  color: #f4d887;
+  background: rgba(42, 64, 84, 0.7);
+  border: 1px solid rgba(101, 198, 202, 0.16);
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.centerDora .miniTile {
+  width: 22px;
+  min-width: 22px;
+  height: 31px;
+}
+
 .lastDiscard .miniTile {
   width: 34px;
   min-width: 34px;
   height: 48px;
   box-shadow: 0 0 0 2px rgba(245, 202, 96, 0.2);
+}
+
+.boardStack {
+  grid-template-rows: minmax(560px, 1fr) auto auto;
+}
+
+.gameBoard {
+  min-height: 560px;
+  perspective: 900px;
+  background:
+    radial-gradient(circle at 50% 48%, rgba(65, 128, 148, 0.22), transparent 28%),
+    linear-gradient(112deg, rgba(8, 26, 45, 0.84), rgba(18, 55, 88, 0.76) 46%, rgba(8, 20, 34, 0.9)),
+    url("/backgrounds/game-table-bg.png") center / cover;
+}
+
+.gameBoard::before {
+  content: "";
+  position: absolute;
+  left: 15%;
+  right: 14%;
+  top: 12%;
+  bottom: 16%;
+  z-index: 0;
+  border: 2px solid rgba(2, 15, 32, 0.42);
+  clip-path: polygon(18% 0, 82% 0, 100% 50%, 82% 100%, 18% 100%, 0 50%);
+  box-shadow:
+    inset 0 0 0 1px rgba(143, 187, 208, 0.14),
+    inset 0 0 44px rgba(0, 0, 0, 0.24);
+  transform: rotateX(8deg);
+}
+
+.gameBoard::after {
+  z-index: 0;
+  background:
+    linear-gradient(120deg, transparent 48%, rgba(0, 0, 0, 0.18) 49%, transparent 51%),
+    linear-gradient(60deg, transparent 48%, rgba(0, 0, 0, 0.18) 49%, transparent 51%),
+    radial-gradient(circle at 50% 50%, rgba(69, 196, 193, 0.12), transparent 34%);
+}
+
+.tableFelt {
+  position: absolute;
+  inset: 9% 11% 12%;
+  z-index: 1;
+  pointer-events: none;
+  border: 1px solid rgba(125, 177, 201, 0.14);
+  clip-path: polygon(16% 0, 84% 0, 100% 50%, 84% 100%, 16% 100%, 0 50%);
+  transform: rotateX(8deg);
+}
+
+.feltGuide {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 48%;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(4, 15, 28, 0.44), rgba(125, 177, 201, 0.22));
+  transform-origin: left center;
+}
+
+.guideTop {
+  transform: rotate(-136deg);
+}
+
+.guideRight {
+  transform: rotate(-44deg);
+}
+
+.guideBottom {
+  transform: rotate(44deg);
+}
+
+.guideLeft {
+  transform: rotate(136deg);
+}
+
+.wallRail,
+.playerSpot,
+.riverLane,
+.centerConsole {
+  z-index: 3;
+}
+
+.wallTop {
+  left: 37%;
+  right: 10%;
+  top: 10px;
+  transform: rotateX(12deg);
+}
+
+.wallRight {
+  right: 7%;
+  top: 23%;
+  transform: rotateY(-18deg) skewY(8deg);
+}
+
+.wallLeft {
+  left: 8%;
+  top: 25%;
+  transform: rotateY(18deg) skewY(-8deg);
+}
+
+.tileBacks {
+  gap: 2px;
+  filter: drop-shadow(0 8px 7px rgba(0, 0, 0, 0.28));
+}
+
+.tileBacks span {
+  width: 25px;
+  height: 38px;
+  background:
+    linear-gradient(90deg, #fff7dc 0 16%, transparent 16%),
+    linear-gradient(180deg, #ffa52b, #cf7620);
+  border-color: rgba(255, 235, 177, 0.92);
+  border-radius: 4px;
+  box-shadow:
+    inset -3px 0 0 rgba(111, 55, 14, 0.2),
+    0 4px 0 #79451c;
+}
+
+.tileBacks.vertical span {
+  width: 34px;
+  height: 24px;
+  background:
+    linear-gradient(90deg, #fff7dc 0 20%, transparent 20%),
+    linear-gradient(180deg, #ffa52b, #c9711f);
+}
+
+.playerSpot {
+  min-width: 148px;
+  filter: drop-shadow(0 10px 12px rgba(0, 0, 0, 0.28));
+}
+
+.spot0 {
+  left: 20%;
+  bottom: 26px;
+  width: 158px;
+  transform: none;
+}
+
+.spot1 {
+  right: 18px;
+  top: 40%;
+  width: 148px;
+  transform: none;
+}
+
+.spot2 {
+  left: auto;
+  right: 22%;
+  top: 54px;
+  width: 148px;
+  transform: none;
+}
+
+.spot3 {
+  left: 18px;
+  top: 35%;
+  width: 148px;
+  transform: none;
+}
+
+.playerBadge {
+  min-height: 58px;
+  grid-template-columns: 46px minmax(0, 1fr);
+  padding: 5px;
+  background: linear-gradient(180deg, rgba(14, 22, 34, 0.88), rgba(6, 10, 18, 0.9));
+  border-color: rgba(244, 181, 85, 0.58);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05),
+    0 5px 0 rgba(3, 6, 12, 0.42);
+}
+
+.avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 7px;
+  color: #fff7df;
+  background:
+    linear-gradient(160deg, rgba(244, 216, 135, 0.22), rgba(16, 35, 55, 0.2)),
+    linear-gradient(180deg, #8c3449, #2d253e);
+  border: 1px solid rgba(245, 202, 96, 0.78);
+}
+
+.playerBadge .turnChip {
+  grid-column: 1 / -1;
+  justify-self: center;
+  min-height: 20px;
+  margin-top: -1px;
+  border-radius: 4px;
+}
+
+.opponentWall {
+  display: none;
+}
+
+.spotMelds {
+  justify-content: center;
+  padding: 3px;
+  background: rgba(7, 10, 18, 0.32);
+  border: 1px solid rgba(255, 232, 178, 0.1);
+  border-radius: 6px;
+}
+
+.riverLane {
+  position: absolute;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  pointer-events: none;
+}
+
+.river0 {
+  left: 50%;
+  bottom: 30%;
+  max-width: 270px;
+  justify-content: center;
+  transform: translateX(-50%);
+}
+
+.river2 {
+  left: 50%;
+  top: 28%;
+  max-width: 270px;
+  justify-content: center;
+  transform: translateX(-50%) rotate(180deg);
+}
+
+.river1 {
+  right: 31%;
+  top: 50%;
+  width: 250px;
+  justify-content: center;
+  transform: translate(50%, -50%) rotate(90deg);
+}
+
+.river3 {
+  left: 31%;
+  top: 50%;
+  width: 250px;
+  justify-content: center;
+  transform: translate(-50%, -50%) rotate(-90deg);
+}
+
+.riverLane .miniTile {
+  width: 28px;
+  min-width: 28px;
+  height: 39px;
+  box-shadow: 0 3px 0 rgba(99, 74, 40, 0.52);
+}
+
+.centerConsole {
+  width: 172px;
+  min-height: 156px;
+  padding: 22px 18px 16px;
+  gap: 6px;
+  background:
+    linear-gradient(180deg, rgba(51, 57, 66, 0.96), rgba(17, 22, 31, 0.98)),
+    radial-gradient(circle at 50% 42%, rgba(88, 227, 218, 0.25), transparent 42%);
+  border-color: rgba(245, 202, 96, 0.48);
+  border-radius: 16px;
+  clip-path: polygon(18% 0, 82% 0, 100% 18%, 100% 82%, 82% 100%, 18% 100%, 0 82%, 0 18%);
+  box-shadow:
+    inset 0 0 0 2px rgba(0, 0, 0, 0.28),
+    inset 0 0 22px rgba(0, 0, 0, 0.36),
+    0 14px 28px rgba(0, 0, 0, 0.36);
+}
+
+.windMarker {
+  position: absolute;
+  width: 34px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  color: #efe6bc;
+  background: linear-gradient(180deg, #1f2d47, #101626);
+  border: 1px solid rgba(245, 202, 96, 0.34);
+  border-radius: 6px;
+  font-weight: 1000;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.36);
+}
+
+.markerTop {
+  left: 50%;
+  top: -18px;
+  transform: translateX(-50%) rotate(180deg);
+}
+
+.markerRight {
+  right: -18px;
+  top: 50%;
+  transform: translateY(-50%) rotate(90deg);
+}
+
+.markerBottom {
+  left: 50%;
+  bottom: -18px;
+  transform: translateX(-50%);
+}
+
+.markerLeft {
+  left: -18px;
+  top: 50%;
+  transform: translateY(-50%) rotate(-90deg);
+}
+
+.roundDial {
+  gap: 4px;
+}
+
+.roundDial span,
+.roundDial strong,
+.lastDiscardLabel {
+  background: rgba(42, 64, 84, 0.7);
+  border: 1px solid rgba(101, 198, 202, 0.16);
+}
+
+.centerPoints strong {
+  color: #8ce6df;
+  text-shadow: 0 0 10px rgba(88, 227, 218, 0.35);
+}
+
+.turnCountdown {
+  min-width: 114px;
+  min-height: 44px;
+  padding: 5px 7px;
+}
+
+.timerRing {
+  width: 32px;
+  height: 32px;
 }
 
 .waitPreview {
@@ -936,15 +1437,21 @@ input {
   padding: 10px 4px 5px;
   display: flex;
   align-items: end;
-  gap: 5px;
+  justify-content: center;
+  gap: 4px;
   overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.handTiles::-webkit-scrollbar {
+  display: none;
 }
 
 .tileButton {
   position: relative;
-  flex: 0 0 46px;
-  width: 46px;
-  height: 72px;
+  flex: 0 0 42px;
+  width: 42px;
+  height: 66px;
   padding: 2px;
   display: inline-flex;
   align-items: center;
@@ -1143,6 +1650,12 @@ input {
   font-weight: 900;
 }
 
+.lobbyInfoPanel .statGrid dd {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .latencyValue.good {
   color: #72efbc;
 }
@@ -1187,6 +1700,113 @@ input {
 .muted {
   color: #aeb6c5;
   font-size: 13px;
+}
+
+.catalogBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  padding: 24px;
+  display: grid;
+  place-items: center;
+  background: rgba(3, 5, 10, 0.72);
+  backdrop-filter: blur(8px);
+}
+
+.catalogPanel {
+  position: relative;
+  width: min(980px, 100%);
+  max-height: calc(100vh - 48px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  background: #0c1421;
+  border: 1px solid rgba(245, 202, 96, 0.32);
+  border-radius: 8px;
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.55);
+}
+
+.catalogHeader {
+  min-height: 98px;
+  padding: 22px 64px 18px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  background:
+    linear-gradient(118deg, rgba(42, 80, 98, 0.94), rgba(21, 35, 55, 0.96) 58%, rgba(12, 17, 28, 0.98)),
+    radial-gradient(circle at 82% 22%, rgba(245, 202, 96, 0.16), transparent 28%);
+  border-bottom: 1px solid rgba(255, 232, 178, 0.14);
+}
+
+.catalogHeader h2,
+.catalogHeader p {
+  margin: 0;
+}
+
+.catalogHeader h2 {
+  margin-top: 6px;
+  color: #fff7df;
+  font-size: 24px;
+}
+
+.catalogKicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #f4d887;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.catalogTable {
+  min-height: 0;
+  padding: 12px;
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  overflow: auto;
+}
+
+.catalogRow {
+  min-height: 46px;
+  display: grid;
+  grid-template-columns: minmax(108px, 150px) minmax(78px, 104px) minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  color: #dce7ea;
+  background: rgba(7, 10, 18, 0.34);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.catalogRow strong {
+  color: #fff7df;
+}
+
+.catalogHead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  color: #f4d887;
+  background: #121c2b;
+  border-color: rgba(245, 202, 96, 0.28);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.catalogTai {
+  width: fit-content;
+  min-width: 40px;
+  padding: 4px 8px;
+  color: #13221f;
+  background: #f4d887;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 900;
+  text-align: center;
 }
 
 .settlementBackdrop {
@@ -1462,6 +2082,10 @@ input {
     grid-template-columns: 220px minmax(0, 1fr);
   }
 
+  .activeGameScene {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .statusPanel {
     grid-column: 1 / -1;
     display: grid;
@@ -1474,6 +2098,10 @@ input {
 
   .gameBoard {
     min-height: 430px;
+  }
+
+  .activeGameScene .gameBoard {
+    min-height: 500px;
   }
 }
 
@@ -1498,8 +2126,24 @@ input {
     grid-template-columns: 1fr;
   }
 
+  .activeGameScene {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .roomLobby {
+    grid-template-columns: 1fr;
+  }
+
   .seatManager {
     order: 2;
+  }
+
+  .lobbySide .seatManager {
+    order: 0;
+  }
+
+  .lobbyInfoPanel {
+    order: 1;
   }
 
   .boardStack {
@@ -1515,6 +2159,14 @@ input {
 
   .gameBoard {
     min-height: 340px;
+  }
+
+  .activeGameScene .gameBoard {
+    min-height: 420px;
+  }
+
+  .lobbyTableArea {
+    grid-template-rows: minmax(340px, 1fr) auto;
   }
 
   .wallTop {
@@ -1592,6 +2244,11 @@ input {
     transform: translateX(-50%);
   }
 
+  .spot1 .playerSpotStats,
+  .spot3 .playerSpotStats {
+    display: none;
+  }
+
   .avatar {
     width: 30px;
     height: 30px;
@@ -1643,6 +2300,36 @@ input {
 
   .settlementBackdrop {
     padding: 10px;
+  }
+
+  .catalogBackdrop {
+    padding: 10px;
+  }
+
+  .catalogPanel {
+    max-height: calc(100vh - 20px);
+  }
+
+  .catalogHeader {
+    min-height: 86px;
+    padding: 18px 58px 16px 18px;
+  }
+
+  .catalogHeader h2 {
+    font-size: 21px;
+  }
+
+  .catalogRow {
+    grid-template-columns: minmax(92px, 1fr) auto;
+    gap: 8px 10px;
+  }
+
+  .catalogHead {
+    display: none;
+  }
+
+  .catalogRow span:last-child {
+    grid-column: 1 / -1;
   }
 
   .settlementScene {
@@ -1704,8 +2391,16 @@ input {
     gap: 6px;
   }
 
+  .activeGameScene .boardStack {
+    grid-template-rows: minmax(430px, 1fr) auto auto;
+  }
+
   .gameBoard {
     min-height: 330px;
+  }
+
+  .activeGameScene .gameBoard {
+    min-height: 430px;
   }
 
   .centerConsole {
@@ -1747,7 +2442,9 @@ input {
   }
 
   .joinBox,
-  .modePicker {
+  .modePicker,
+  .settingsGrid,
+  .lobbyReadyBar {
     grid-template-columns: 1fr;
   }
 
@@ -1781,6 +2478,19 @@ input {
 
   .centerConsole {
     width: 170px;
+  }
+
+  .catalogHeader {
+    padding: 16px 54px 14px 16px;
+  }
+
+  .catalogTable {
+    padding: 8px;
+  }
+
+  .catalogRow {
+    padding: 9px 10px;
+    font-size: 13px;
   }
 
   .settlementTiles {

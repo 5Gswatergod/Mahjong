@@ -46,9 +46,18 @@ export function TableScreen({
   const selfPlayer = mySeatIndex === undefined ? undefined : game.players.find((player) => player.seatIndex === mySeatIndex);
   const currentPlayer = game.players.find((player) => player.seatIndex === game.currentSeat);
   const liveWallCount = Math.max(0, game.wallCount - game.deadWallCount);
+  const rightPlayer = orderedSeats.find(({ distance }) => distance === 1)?.player;
+  const topPlayer = orderedSeats.find(({ distance }) => distance === 2)?.player;
+  const leftPlayer = orderedSeats.find(({ distance }) => distance === 3)?.player;
 
   return (
     <div className={myTurn ? "gameBoard myTurn" : "gameBoard"}>
+      <div className="tableFelt" aria-hidden="true">
+        <span className="feltGuide guideTop" />
+        <span className="feltGuide guideRight" />
+        <span className="feltGuide guideBottom" />
+        <span className="feltGuide guideLeft" />
+      </div>
       <div className="wallRail wallTop">
         <TileBacks count={18} />
       </div>
@@ -69,7 +78,15 @@ export function TableScreen({
         />
       ))}
 
+      {orderedSeats.map(({ player, distance }) => (
+        <RiverLane key={`river-${player.seatIndex}`} player={player} distance={distance} />
+      ))}
+
       <div className="centerConsole">
+        <span className="windMarker markerTop">{windLabels[topPlayer?.wind ?? "north"]}</span>
+        <span className="windMarker markerRight">{windLabels[rightPlayer?.wind ?? "east"]}</span>
+        <span className="windMarker markerBottom">{windLabels[selfPlayer?.wind ?? "south"]}</span>
+        <span className="windMarker markerLeft">{windLabels[leftPlayer?.wind ?? "west"]}</span>
         <div className="roundDial">
           <span>{modeLabels[game.mode]}</span>
           <strong>{windLabels[game.roundWind]}場</strong>
@@ -82,6 +99,14 @@ export function TableScreen({
           <span>{phaseLabel(game.phase)}</span>
         </div>
         <TurnCountdown game={game} serverNow={serverNow} latencyMs={latencyMs} />
+        {game.riichi && (
+          <div className="centerDora">
+            <span>寶牌</span>
+            {game.riichi.doraIndicators.map((tile) => (
+              <MiniTile key={tile.id} tile={tile} />
+            ))}
+          </div>
+        )}
         {game.lastDiscard && (
           <div className="lastDiscard">
             <MiniTile tile={game.lastDiscard.tile} />
@@ -104,7 +129,6 @@ function PlayerSpot({
   active: boolean;
   isSelf: boolean;
 }) {
-  const latestDiscards = player.discards.slice(-18);
   const meldTiles = player.melds.flatMap((meld) => meld.tiles.map((tile) => ({ tile, meldId: meld.id })));
 
   return (
@@ -118,6 +142,12 @@ function PlayerSpot({
           </p>
         </div>
         <span className="turnChip">{active ? "出牌" : player.declaredRiichi ? "立直" : player.declaredTing ? "聽" : `${player.handCount}張`}</span>
+      </div>
+
+      <div className="playerSpotStats">
+        <span>{player.handCount} 張</span>
+        <span>{player.melds.length} 副露</span>
+        {player.flowerTiles.length > 0 && <span>{player.flowerTiles.length} 花</span>}
       </div>
 
       {!isSelf && (
@@ -137,11 +167,21 @@ function PlayerSpot({
         </div>
       )}
 
-      <div className="spotRiver">
-        {latestDiscards.map((tile) => (
-          <MiniTile key={tile.id} tile={tile} />
-        ))}
-      </div>
+    </div>
+  );
+}
+
+function RiverLane({ player, distance }: { player: PublicPlayerState; distance: number }) {
+  const latestDiscards = player.discards.slice(-18);
+  if (latestDiscards.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className={["riverLane", `river${distance}`].join(" ")}>
+      {latestDiscards.map((tile) => (
+        <MiniTile key={tile.id} tile={tile} />
+      ))}
     </div>
   );
 }

@@ -36,6 +36,7 @@ export interface CorePlayer {
   discards: Tile[];
   declaredTing: boolean;
   declaredRiichi: boolean;
+  declaredHeavenTing: boolean;
   declaredEarthTing: boolean;
   firstDiscardMade: boolean;
   firstDrawMade: boolean;
@@ -114,6 +115,7 @@ export function createGame(seats: PlayerSeat[], options: CreateGameOptions = {})
       discards: [],
       declaredTing: false,
       declaredRiichi: false,
+      declaredHeavenTing: false,
       declaredEarthTing: false,
       firstDiscardMade: false,
       firstDrawMade: false,
@@ -349,6 +351,7 @@ export function applyClaim(
   const claimedTile = game.claimWindow.discard;
   const fromSeat = game.claimWindow.fromSeat;
   removeLastDiscard(game, fromSeat, claimedTile.id);
+  clearClaimStaleDraw(game, claimer);
 
   if (claimType === "pong") {
     const consumed = removeTilesByType(claimer.hand, claimedTile, 2);
@@ -470,8 +473,13 @@ export function applyDeclareTing(game: CoreGame, seatIndex: number): void {
   }
   player.declaredTing = true;
   const noOneHasClaimed = !game.firstClaimOrMeldHappened && game.players.every((candidate) => candidate.melds.length === 0);
-  if (noOneHasClaimed && !player.firstDiscardMade && player.melds.length === 0) {
-    player.declaredEarthTing = true;
+  const earlyDiscardCount = game.players.reduce((total, candidate) => total + candidate.discards.length, 0);
+  if (noOneHasClaimed && !player.firstDiscardMade && player.melds.length === 0 && earlyDiscardCount <= 8) {
+    if (player.seatIndex === game.dealerSeat) {
+      player.declaredHeavenTing = true;
+    } else {
+      player.declaredEarthTing = true;
+    }
   }
   touch(game);
 }
@@ -703,7 +711,7 @@ function drawNormalTile(game: CoreGame, player: CorePlayer): void {
       if (resolveFlowerDrawWin(game, player, tile)) {
         return;
       }
-      drawSupplementTile(game, player, false);
+      drawSupplementTile(game, player, true);
       continue;
     }
     player.hand.push(tile);
@@ -892,6 +900,7 @@ function toScoringPlayer(player: CorePlayer): ScoringPlayer {
     flowers: player.flowers,
     melds: player.melds,
     declaredTing: player.declaredTing,
+    declaredHeavenTing: player.declaredHeavenTing,
     declaredEarthTing: player.declaredEarthTing
   };
 }
@@ -1152,6 +1161,27 @@ function legalDiscardTiles(player: CorePlayer): Tile[] {
   }
   const rawDrawnId = player.drawnTileId.replace("supplement:", "");
   return player.hand.filter((tile) => tile.id === rawDrawnId);
+}
+
+function clearClaimStaleDraw(game: CoreGame, player: CorePlayer): void {
+  const rawDrawnId = player.drawnTileId?.replace("supplement:", "");
+  if (!rawDrawnId) {
+    return;
+  }
+
+  const expectedWaitingCount = waitingHandCount(game, player);
+  if (player.hand.length > expectedWaitingCount) {
+    const staleDrawIndex = player.hand.findIndex((tile) => tile.id === rawDrawnId);
+    if (staleDrawIndex >= 0) {
+      player.hand.splice(staleDrawIndex, 1);
+    }
+  }
+  delete player.drawnTileId;
+}
+
+function waitingHandCount(game: CoreGame, player: CorePlayer): number {
+  const baseCount = game.mode === "riichi" ? 13 : 16;
+  return baseCount - player.melds.length * 3;
 }
 
 function deadWallLimit(game: CoreGame): number {

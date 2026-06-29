@@ -1,8 +1,9 @@
-import { Copy, DoorOpen, Loader2, Play, Send, Shuffle, WifiOff, X } from "lucide-react";
+import { BookOpen, Copy, DoorOpen, Loader2, Play, Send, Shuffle, WifiOff, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 import {
   type ClientToServerEvents,
+  type GameConfig,
   type GameMode,
   type GameState,
   type GuestAuthResponse,
@@ -15,9 +16,10 @@ import {
 } from "@taiwan-mahjong/shared";
 import { ActionDock } from "./components/ActionDock";
 import { Hand } from "./components/Hand";
-import { SeatManager } from "./components/SeatManager";
+import { PatternCatalog } from "./components/PatternCatalog";
+import { RoomLobby } from "./components/RoomLobby";
+import { defaultRoomConfig, RoomSettingsPanel } from "./components/RoomSettingsPanel";
 import { SettlementOverlay } from "./components/SettlementOverlay";
-import { StatusPanel } from "./components/StatusPanel";
 import { TableScreen } from "./components/TableScreen";
 import { AuthExpiredError, api, clearSession, readSession, requestGuestSession, saveSession } from "./api";
 import { modeLabels, windFullLabels } from "./constants";
@@ -32,6 +34,7 @@ export function App() {
   const [guestName, setGuestName] = useState("");
   const [joinCode, setJoinCode] = useState("");
   const [selectedMode, setSelectedMode] = useState<GameMode>("taiwan");
+  const [roomConfig, setRoomConfig] = useState<GameConfig>(() => defaultRoomConfig("taiwan"));
   const [room, setRoom] = useState<RoomSnapshot | null>(null);
   const [game, setGame] = useState<GameState | null>(null);
   const [privateState, setPrivateState] = useState<PrivatePlayerState | null>(null);
@@ -42,6 +45,7 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [selectedTileId, setSelectedTileId] = useState<string | null>(null);
   const [dismissedSettlementHandId, setDismissedSettlementHandId] = useState<string | null>(null);
+  const [showPatternCatalog, setShowPatternCatalog] = useState(false);
   const [clockMs, setClockMs] = useState(() => Date.now());
   const [clockOffsetMs, setClockOffsetMs] = useState(0);
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
@@ -59,6 +63,7 @@ export function App() {
   const settlementResult = settlement ?? game?.settlement ?? null;
   const showSettlement = Boolean(settlementResult && dismissedSettlementHandId !== settlementResult.handId);
   const serverNow = clockMs + clockOffsetMs;
+  const activeGame = Boolean(game && game.phase !== "waiting" && game.phase !== "settled" && game.phase !== "draw");
   const canManageSeats = Boolean(
     room &&
       session &&
@@ -84,6 +89,10 @@ export function App() {
       setDismissedSettlementHandId(null);
     }
   }, [settlementResult]);
+
+  useEffect(() => {
+    setRoomConfig(defaultRoomConfig(selectedMode));
+  }, [selectedMode]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setClockMs(Date.now()), 250);
@@ -227,7 +236,7 @@ export function App() {
       const snapshot = await runWithFreshSession((activeSession) =>
         api<RoomSnapshot>("/api/rooms", activeSession.token, {
           method: "POST",
-          body: JSON.stringify({ mode: selectedMode })
+          body: JSON.stringify({ mode: selectedMode, config: roomConfig })
         })
       );
       applyServerTime(snapshot.serverTime);
@@ -242,7 +251,7 @@ export function App() {
     } finally {
       setBusy(false);
     }
-  }, [applyServerTime, handleAuthExpired, runWithFreshSession, selectedMode, session]);
+  }, [applyServerTime, handleAuthExpired, roomConfig, runWithFreshSession, selectedMode, session]);
 
   const joinRoom = useCallback(async () => {
     if (!session || !joinCode.trim()) return;
@@ -359,7 +368,7 @@ export function App() {
   }, [room]);
 
   return (
-    <main className={room ? "appShell gameAppShell" : "appShell lobbyAppShell"}>
+    <main className={room ? (activeGame ? "appShell gameAppShell" : "appShell roomLobbyShell") : "appShell lobbyAppShell"}>
       {error && (
         <div className="notice error">
           <WifiOff size={16} />
@@ -403,6 +412,12 @@ export function App() {
               </button>
             ))}
           </div>
+          <RoomSettingsPanel
+            mode={selectedMode}
+            config={roomConfig}
+            onChange={setRoomConfig}
+            onReset={() => setRoomConfig(defaultRoomConfig(selectedMode))}
+          />
           <button className="primaryButton" disabled={busy} onClick={createRoom}>
             <Shuffle size={18} />
             建立 {modeLabels[selectedMode]} 房
@@ -431,6 +446,9 @@ export function App() {
               </div>
             </div>
             <div className="gameHeaderActions">
+              <button className="iconButton" onClick={() => setShowPatternCatalog(true)} title="牌型目錄">
+                <BookOpen size={18} />
+              </button>
               <button className="iconButton" onClick={copyCode} title="複製房號">
                 <Copy size={18} />
               </button>
@@ -440,39 +458,37 @@ export function App() {
             </div>
           </header>
 
-          <div className="gameScene">
-            <SeatManager
+          {activeGame ? (
+            <div className="gameScene activeGameScene">
+              <div className="boardStack">
+                <TableScreen room={room} game={game} mySeatIndex={mySeat?.seatIndex} myTurn={Boolean(myTurn)} serverNow={serverNow} latencyMs={latencyMs} />
+                <ActionDock actions={visibleActions} hand={privateState?.hand ?? []} claimDiscard={game?.claimWindow?.discard} onAction={triggerAction} />
+                <Hand
+                  tiles={privateState?.hand ?? []}
+                  discardableIds={discardableIds}
+                  selectedTileId={selectedTileId}
+                  drawnTileId={privateState?.drawnTileId}
+                  actionHintIds={actionHintIds}
+                  onTileClick={discard}
+                  myTurn={Boolean(myTurn)}
+                />
+              </div>
+            </div>
+          ) : (
+            <RoomLobby
               room={room}
               game={game}
               myPlayerId={session.playerId}
+              mySeatIndex={mySeat?.seatIndex}
               canManageSeats={canManageSeats}
+              mySeatReady={mySeat?.ready}
+              onReady={toggleReady}
               onAddBot={addBot}
               onClearSeat={clearSeat}
-            />
-
-            <div className="boardStack">
-              <TableScreen room={room} game={game} mySeatIndex={mySeat?.seatIndex} myTurn={Boolean(myTurn)} serverNow={serverNow} latencyMs={latencyMs} />
-              <ActionDock actions={visibleActions} hand={privateState?.hand ?? []} claimDiscard={game?.claimWindow?.discard} onAction={triggerAction} />
-              <Hand
-                tiles={privateState?.hand ?? []}
-                discardableIds={discardableIds}
-                selectedTileId={selectedTileId}
-                drawnTileId={privateState?.drawnTileId}
-                actionHintIds={actionHintIds}
-                onTileClick={discard}
-                myTurn={Boolean(myTurn)}
-              />
-            </div>
-
-            <StatusPanel
-              game={game}
-              privateState={privateState}
-              mySeatIndex={mySeat?.seatIndex}
-              onReady={toggleReady}
-              mySeatReady={mySeat?.ready}
+              serverNow={serverNow}
               latencyMs={latencyMs}
             />
-          </div>
+          )}
 
           {showSettlement && settlementResult && (
             <SettlementOverlay
@@ -484,6 +500,8 @@ export function App() {
               onClose={() => setDismissedSettlementHandId(settlementResult.handId)}
             />
           )}
+
+          {showPatternCatalog && <PatternCatalog onClose={() => setShowPatternCatalog(false)} />}
         </section>
       )}
     </main>

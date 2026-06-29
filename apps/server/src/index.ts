@@ -27,6 +27,7 @@ import {
 import {
   DEFAULT_GAME_CONFIG,
   type ClientToServerEvents,
+  type GameConfig,
   type GameMode,
   type PlayerSeat,
   type RoomSnapshot,
@@ -56,6 +57,7 @@ interface GuestSession {
 interface Room {
   code: string;
   mode: GameMode;
+  config: GameConfig;
   hostPlayerId: string;
   seats: PlayerSeat[];
   game?: CoreGame;
@@ -87,6 +89,18 @@ const eventStore: EventStore = databaseConnection ? new PgEventStore(databaseCon
 await eventStore.init();
 await fastify.register(cors, { origin: webOrigin, credentials: true });
 
+const roomConfigSchema = z
+  .object({
+    basePoints: z.number().int().min(0).max(100_000).optional(),
+    pointPerTai: z.number().int().min(0).max(10_000).optional(),
+    initialCoins: z.number().int().min(1_000).max(100_000).optional(),
+    disconnectGraceMs: z.number().int().min(10_000).max(300_000).optional(),
+    claimWindowMs: z.number().int().min(3_000).max(30_000).optional(),
+    autoDiscardMs: z.number().int().min(5_000).max(120_000).optional(),
+    latencyGraceMs: z.number().int().min(0).max(5_000).optional()
+  })
+  .partial();
+
 fastify.get("/health", async () => ({
   ok: true,
   uptime: process.uptime(),
@@ -114,10 +128,15 @@ fastify.post("/api/rooms", async (request, reply) => {
     return reply.code(401).send({ message: "Missing or invalid guest token." });
   }
 
-  const body = z.object({ mode: z.enum(["taiwan", "riichi"]).default("taiwan") }).parse(request.body ?? {});
-  const room = createRoom(session, body.mode);
+  const body = z
+    .object({
+      mode: z.enum(["taiwan", "riichi"]).default("taiwan"),
+      config: roomConfigSchema.optional()
+    })
+    .parse(request.body ?? {});
+  const room = createRoom(session, body.mode, stripUndefinedConfig(body.config));
   rooms.set(room.code, room);
-  await persist(room.code, "room.created", { hostPlayerId: session.playerId, mode: room.mode });
+  await persist(room.code, "room.created", { hostPlayerId: session.playerId, mode: room.mode, config: room.config });
   return snapshotRoom(room);
 });
 
@@ -361,13 +380,14 @@ setInterval(() => {
 
 await fastify.listen({ port, host: "0.0.0.0" });
 
-function createRoom(session: GuestSession, mode: GameMode): Room {
+function createRoom(session: GuestSession, mode: GameMode, configOverrides: Partial<GameConfig> = {}): Room {
   const code = createRoomCode();
   const now = Date.now();
-  const initialCoins = mode === "riichi" ? 25000 : DEFAULT_GAME_CONFIG.initialCoins;
+  const config = resolveRoomConfig(mode, configOverrides);
   return {
     code,
     mode,
+    config,
     hostPlayerId: session.playerId,
     seats: [
       {
@@ -375,14 +395,14 @@ function createRoom(session: GuestSession, mode: GameMode): Room {
         wind: "east",
         playerId: session.playerId,
         name: session.name,
-        coins: initialCoins,
+        coins: config.initialCoins,
         ready: false,
         connected: false
       },
       ...winds.slice(1).map((wind, offset) => ({
         seatIndex: offset + 1,
         wind,
-        coins: initialCoins,
+        coins: config.initialCoins,
         ready: false,
         connected: false
       }))
@@ -391,6 +411,18 @@ function createRoom(session: GuestSession, mode: GameMode): Room {
     updatedAt: now,
     disconnectTimers: new Map()
   };
+}
+
+function resolveRoomConfig(mode: GameMode, overrides: Partial<GameConfig>): GameConfig {
+  return {
+    ...DEFAULT_GAME_CONFIG,
+    initialCoins: mode === "riichi" ? 25_000 : DEFAULT_GAME_CONFIG.initialCoins,
+    ...overrides
+  };
+}
+
+function stripUndefinedConfig(config: Partial<Record<keyof GameConfig, number | undefined>> | undefined): Partial<GameConfig> {
+  return Object.fromEntries(Object.entries(config ?? {}).filter(([, value]) => typeof value === "number")) as Partial<GameConfig>;
 }
 
 function joinRoom(room: Room, session: GuestSession): PlayerSeat {
@@ -404,7 +436,7 @@ function joinRoom(room: Room, session: GuestSession): PlayerSeat {
   }
   seat.playerId = session.playerId;
   seat.name = session.name;
-  seat.coins = room.mode === "riichi" ? 25000 : DEFAULT_GAME_CONFIG.initialCoins;
+  seat.coins = room.config.initialCoins;
   seat.ready = false;
   seat.connected = false;
   room.updatedAt = Date.now();
@@ -430,7 +462,7 @@ function addBotToRoom(room: Room, requesterPlayerId: string, seatIndex: number):
   seat.isBot = true;
   seat.ready = true;
   seat.connected = true;
-  seat.coins = room.mode === "riichi" ? 25000 : DEFAULT_GAME_CONFIG.initialCoins;
+  seat.coins = room.config.initialCoins;
   room.updatedAt = Date.now();
   return seat;
 }
@@ -455,7 +487,7 @@ function clearSeatInRoom(room: Room, requesterPlayerId: string, seatIndex: numbe
   delete seat.isBot;
   seat.ready = false;
   seat.connected = false;
-  seat.coins = room.mode === "riichi" ? 25000 : DEFAULT_GAME_CONFIG.initialCoins;
+  seat.coins = room.config.initialCoins;
   room.updatedAt = Date.now();
   return seat;
 }
@@ -502,12 +534,12 @@ function maybeStartHand(room: Room): void {
           : 0;
   const roundWind = room.mode === "riichi" ? (roundIndex >= 4 ? "south" : "east") : "east";
   const dealerStreak = previous && dealerContinues ? previous.dealerStreak + 1 : 0;
-  room.game = createGame(room.seats, { mode: room.mode, dealerSeat, roundWind, roundIndex, dealerStreak });
+  room.game = createGame(room.seats, { mode: room.mode, config: room.config, dealerSeat, roundWind, roundIndex, dealerStreak });
   for (const seat of room.seats) {
     seat.ready = false;
   }
   room.updatedAt = Date.now();
-  void persist(room.code, "game.started", { handId: room.game.handId, dealerSeat, dealerStreak });
+  void persist(room.code, "game.started", { handId: room.game.handId, dealerSeat, dealerStreak, config: room.config });
 }
 
 function afterGameMutation(room: Room): void {
@@ -661,6 +693,7 @@ function snapshotRoom(room: Room): RoomSnapshot {
   return {
     code: room.code,
     mode: room.mode,
+    config: room.config,
     serverTime: Date.now(),
     hostPlayerId: room.hostPlayerId,
     seats: room.seats,

@@ -10,7 +10,6 @@ import type {
 import { DEFAULT_GAME_CONFIG } from "@taiwan-mahjong/shared";
 import { decomposeWinningHand, getWinningTiles, type HandDecomposition } from "./hand.js";
 import {
-  flowerMatchesWind,
   hasFlowerSet,
   keyRank,
   keySuit,
@@ -25,6 +24,7 @@ export interface ScoringPlayer {
   flowers: Tile[];
   melds: Meld[];
   declaredTing: boolean;
+  declaredHeavenTing?: boolean;
   declaredEarthTing: boolean;
 }
 
@@ -96,6 +96,7 @@ function evaluatePatterns(
   const allTilesAreHonors = allKeys.length > 0 && honorCount === allKeys.length;
   const allTilesAreOneSuit = allSuits.size === 1 && honorCount === 0;
   const halfFlush = allSuits.size === 1 && honorCount > 0;
+  const noHonorsOrFlowers = honorCount === 0 && winner.flowers.length === 0;
   const allPongs = groups.every((group) => group.kind === "triplet");
   const bigThreeDragons = new Set(dragonTriplets).size === 3;
   const smallThreeDragons = new Set(dragonTriplets).size === 2 && decomposition.pairKey.startsWith("dragon:");
@@ -104,11 +105,14 @@ function evaluatePatterns(
   const concealedTriplets = groups.filter((group) => group.kind === "triplet" && group.concealed).length;
   const isMenqing = winner.melds.every((meld) => meld.type === "concealedKong");
   const isSelfDraw = context.winMode === "selfDraw";
+  const isHeavenTing = Boolean(winner.declaredHeavenTing);
   const isEarthTing = winner.declaredEarthTing;
+  const isSpecialTing = isHeavenTing || isEarthTing;
   const isFiveConcealedTriplets = concealedTriplets >= 5;
+  const isAllExposed = winner.melds.length === 5 && context.winMode === "discard";
 
   if (context.isInitialWin && winner.seatIndex === table.dealerSeat) {
-    add(patterns, "heavenly-hand", "天胡", 16);
+    add(patterns, "heavenly-hand", "天胡", 24);
   }
   if (context.isFirstDrawWin && winner.seatIndex !== table.dealerSeat) {
     add(patterns, "earthly-hand", "地胡", 16);
@@ -129,17 +133,14 @@ function evaluatePatterns(
     add(patterns, "small-three-dragons", "小三元", 4);
   }
 
-  if (allTilesAreHonors) {
-    add(patterns, "all-honors", "字一色", 16);
-  }
-  if (allTilesAreOneSuit) {
-    add(patterns, "clean-one-suit", "清一色", 12);
+  if (allTilesAreHonors || allTilesAreOneSuit) {
+    add(patterns, "clean-one-suit", "清一色", 8);
   } else if (halfFlush) {
     add(patterns, "half-flush", "湊一色", 4);
   }
 
   if (isFiveConcealedTriplets) {
-    add(patterns, "five-concealed-triplets", "五暗坎", 13);
+    add(patterns, "five-concealed-triplets", "五暗刻", 8);
   } else if (concealedTriplets >= 4) {
     add(patterns, "four-concealed-triplets", "四暗坎", 5);
   } else if (concealedTriplets >= 3) {
@@ -160,9 +161,8 @@ function evaluatePatterns(
     add(patterns, "initial-flower-win", "配牌花胡", 4);
   }
 
-  const flowerTai = winner.flowers.filter((tile) => flowerMatchesWind(tile, winner.wind)).length;
-  if (flowerTai > 0) {
-    add(patterns, "seat-flowers", `花牌台 x${flowerTai}`, flowerTai);
+  if (winner.flowers.length > 0) {
+    add(patterns, "visible-flowers", `見花見台 x${winner.flowers.length}`, winner.flowers.length);
   }
   if (hasFlowerSet(winner.flowers, "season")) {
     add(patterns, "season-flower-set", "春夏秋冬", 2);
@@ -171,15 +171,8 @@ function evaluatePatterns(
     add(patterns, "plant-flower-set", "梅蘭竹菊", 2);
   }
 
-  if (!bigFourWinds) {
-    for (const key of windTriplets) {
-      if (key === `wind:${table.roundWind}`) {
-        add(patterns, `round-wind-${key}`, `${tileTypeLabel(key)}圈風台`, 1);
-      }
-      if (key === `wind:${winner.wind}`) {
-        add(patterns, `seat-wind-${key}`, `${tileTypeLabel(key)}門風台`, 1);
-      }
-    }
+  for (const key of new Set(windTriplets)) {
+    add(patterns, `wind-triplet-${key}`, `${tileTypeLabel(key)}風刻`, 1);
   }
 
   if (!bigThreeDragons && !smallThreeDragons) {
@@ -188,8 +181,11 @@ function evaluatePatterns(
     }
   }
 
-  if (winner.declaredTing && !isEarthTing) {
+  if (winner.declaredTing && !isSpecialTing) {
     add(patterns, "declared-ting", "宣告聽牌", 1);
+  }
+  if (isHeavenTing) {
+    add(patterns, "heaven-ting", "天聽", 8);
   }
   if (isEarthTing) {
     add(patterns, "earth-ting", "地聽", 4);
@@ -197,14 +193,22 @@ function evaluatePatterns(
 
   if (isFiveConcealedTriplets && isSelfDraw) {
     add(patterns, "concealed-self-draw", "不求自摸", 2);
-  } else if (isMenqing && isSelfDraw && !isEarthTing) {
+  } else if (isMenqing && isSelfDraw && !isSpecialTing) {
     add(patterns, "menqing-self-draw", "門清自摸", 3);
   } else {
-    if (isMenqing && !isEarthTing && !isFiveConcealedTriplets) {
+    if (isMenqing && !isSpecialTing && !isFiveConcealedTriplets) {
       add(patterns, "menqing", "門清", 1);
     }
     if (isSelfDraw) {
-      add(patterns, "self-draw", "自摸", isEarthTing ? 2 : 1);
+      add(patterns, "self-draw", "自摸", 1);
+    }
+  }
+
+  for (const meld of winner.melds) {
+    if (meld.type === "concealedKong") {
+      add(patterns, `concealed-kong-${meld.id}`, "暗槓", 2);
+    } else if (meld.type === "exposedKong" || meld.type === "addedKong") {
+      add(patterns, `kong-${meld.id}`, "槓牌", 1);
     }
   }
 
@@ -219,15 +223,20 @@ function evaluatePatterns(
   }
 
   const waitPattern = detectWaitPattern(winner, context, decomposition);
-  if (waitPattern) {
-    add(patterns, waitPattern.id, waitPattern.name, 1);
+  const effectiveWaitPattern = isAllExposed && waitPattern?.id === "single-wait" ? undefined : waitPattern;
+  if (effectiveWaitPattern) {
+    add(patterns, effectiveWaitPattern.id, effectiveWaitPattern.name, 1);
   }
 
-  if (isPingHu(winner, context, decomposition, waitPattern?.id)) {
+  if (isPingHu(winner, context, decomposition, effectiveWaitPattern?.id)) {
     add(patterns, "ping-hu", "平胡", 2);
   }
 
-  if (winner.melds.length === 5 && context.winMode === "discard") {
+  if (noHonorsOrFlowers) {
+    add(patterns, "no-honors-no-flowers", "無字無花", 2);
+  }
+
+  if (isAllExposed) {
     add(patterns, "all-exposed", "全求", 2);
   }
 
@@ -248,9 +257,8 @@ function evaluateFlowerOnlyPatterns(winner: ScoringPlayer, context: WinContext):
   if (context.isInitialWin) {
     add(patterns, "initial-flower-win", "配牌花胡", 4);
   }
-  const flowerTai = winner.flowers.filter((tile) => flowerMatchesWind(tile, winner.wind)).length;
-  if (flowerTai > 0) {
-    add(patterns, "seat-flowers", `花牌台 x${flowerTai}`, flowerTai);
+  if (winner.flowers.length > 0) {
+    add(patterns, "visible-flowers", `見花見台 x${winner.flowers.length}`, winner.flowers.length);
   }
   if (hasFlowerSet(winner.flowers, "season")) {
     add(patterns, "season-flower-set", "春夏秋冬", 2);
@@ -368,10 +376,6 @@ function isPingHu(
     return false;
   }
   if (decomposition.pairKey.startsWith("wind:") || decomposition.pairKey.startsWith("dragon:")) {
-    return false;
-  }
-  const pairRank = keyRank(decomposition.pairKey);
-  if (!pairRank || ![2, 5, 8].includes(pairRank)) {
     return false;
   }
   return true;

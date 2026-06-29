@@ -226,6 +226,7 @@ export interface GameState {
 export interface RoomSnapshot {
   code: string;
   mode: GameMode;
+  config: GameConfig;
   serverTime: number;
   hostPlayerId: string;
   seats: PlayerSeat[];
