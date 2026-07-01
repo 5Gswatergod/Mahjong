@@ -260,6 +260,10 @@ export function getLegalActions(game: CoreGame, seatIndex: number): LegalAction[
     actions.push({ type: "discard", tileId: tile.id, description: `打出 ${tile.label}` });
   }
 
+  if (game.mode === "taiwan" && !player.declaredTing && canDeclareTingAfterLegalDiscard(player)) {
+    actions.push({ type: "declareTing", description: "聽牌" });
+  }
+
   if (game.mode === "riichi" && !player.declaredRiichi && canDeclareRiichi(player)) {
     actions.push({ type: "declareRiichi", description: "立直" });
   }
@@ -1033,6 +1037,15 @@ function canDeclareTing(player: CorePlayer): boolean {
     const remaining = player.hand.filter((candidate) => candidate.id !== tile.id);
     return isTing(remaining, player.melds);
   });
+}
+
+function canDeclareTingAfterLegalDiscard(player: CorePlayer): boolean {
+  if (!canDeclareTing(player)) {
+    return false;
+  }
+  const rawDrawnId = player.drawnTileId?.replace("supplement:", "");
+  const discardableAfterDeclaration = rawDrawnId ? player.hand.filter((tile) => tile.id === rawDrawnId) : sortTiles(player.hand);
+  return discardableAfterDeclaration.some((tile) => isTing(removeOneTileById(player.hand, tile.id), player.melds));
 }
 
 function canDeclareRiichi(player: CorePlayer): boolean {

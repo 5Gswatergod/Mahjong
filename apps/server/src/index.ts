@@ -22,6 +22,8 @@ import {
   getPrivateState,
   passExpiredClaimWindow,
   passExpiredTurn,
+  seatDistance,
+  tileKey,
   toPublicGameState
 } from "@taiwan-mahjong/game-core";
 import {
@@ -29,13 +31,15 @@ import {
   type ClientToServerEvents,
   type GameConfig,
   type GameMode,
+  type LegalAction,
   type PlayerSeat,
   type RoomSnapshot,
   type ServerToClientEvents,
   type SocketData,
+  type Tile,
   winds
 } from "@taiwan-mahjong/shared";
-import { chooseBotClaimAction, chooseBotTurnAction } from "./bot-policy.js";
+import { chooseBotClaimAction, chooseBotTurnAction, type BotDecisionContext } from "./bot-policy.js";
 import { MemoryEventStore, PgEventStore, type EventStore, resolveDatabaseConnection } from "./event-store.js";
 
 declare module "@taiwan-mahjong/shared" {
@@ -679,13 +683,13 @@ async function runBotStep(room: Room): Promise<void> {
 
   try {
     if (room.game.phase === "claiming" && room.game.claimWindow) {
-      const option = room.game.claimWindow.options.find((candidate) => room.seats[candidate.seatIndex]?.isBot);
-      if (!option) {
+      const botClaim = chooseRunnableBotClaim(room);
+      if (!botClaim) {
         return;
       }
-      const action = chooseBotClaimAction(option.actions);
-      applyClaim(room.game, option.seatIndex, action.type as "chow" | "pong" | "kong" | "win" | "pass", action.tileIds ?? []);
-      await persist(room.code, "bot.claim", { seatIndex: option.seatIndex, type: action.type });
+      const { seatIndex, action } = botClaim;
+      applyClaim(room.game, seatIndex, action.type as "chow" | "pong" | "kong" | "win" | "pass", action.tileIds ?? []);
+      await persist(room.code, "bot.claim", { seatIndex, type: action.type });
       afterGameMutation(room);
       return;
     }
@@ -697,23 +701,135 @@ async function runBotStep(room: Room): Promise<void> {
     if (!seat?.isBot) {
       return;
     }
-    const privateState = getPrivateState(room.game, room.game.currentSeat);
-    const action = chooseBotTurnAction(privateState);
+    const actingSeat = room.game.currentSeat;
+    const privateState = getPrivateState(room.game, actingSeat);
+    const action = chooseBotTurnAction(privateState, buildBotDecisionContext(room.game, actingSeat));
     if (!action) {
       return;
     }
     if (action.type === "win") {
-      applySelfDrawWin(room.game, room.game.currentSeat);
+      applySelfDrawWin(room.game, actingSeat);
     } else if (action.type === "declareRiichi") {
-      applyDeclareRiichi(room.game, room.game.currentSeat);
+      applyDeclareRiichi(room.game, actingSeat);
+    } else if (action.type === "declareTing") {
+      applyDeclareTing(room.game, actingSeat);
+    } else if (action.type === "kong") {
+      applyKong(room.game, actingSeat, action.tileIds ?? [], action.meldId);
     } else if (action.type === "discard" && action.tileId) {
-      applyDiscard(room.game, room.game.currentSeat, action.tileId);
+      applyDiscard(room.game, actingSeat, action.tileId);
     }
-    await persist(room.code, "bot.action", { seatIndex: room.game.currentSeat, type: action.type });
+    await persist(room.code, "bot.action", { seatIndex: actingSeat, type: action.type });
     afterGameMutation(room);
   } catch (error) {
     io.to(room.code).emit("game.error", { message: error instanceof Error ? error.message : "Bot action failed." });
   }
+}
+
+function chooseRunnableBotClaim(room: Room): { seatIndex: number; action: LegalAction } | undefined {
+  const game = room.game;
+  if (!game?.claimWindow) {
+    return undefined;
+  }
+
+  const pendingBotOptions = game.claimWindow.options
+    .filter((option) => room.seats[option.seatIndex]?.isBot && !game.claimWindow!.passedSeatIndices.includes(option.seatIndex))
+    .sort((left, right) => {
+      const priority = highestClaimPriority(right.actions) - highestClaimPriority(left.actions);
+      if (priority !== 0) return priority;
+      return seatDistance(game.claimWindow!.fromSeat, left.seatIndex) - seatDistance(game.claimWindow!.fromSeat, right.seatIndex);
+    });
+
+  for (const option of pendingBotOptions) {
+    const privateState = getPrivateState(game, option.seatIndex);
+    const context = buildBotDecisionContext(game, option.seatIndex);
+    const action = chooseBotClaimAction(option.actions, privateState, context);
+    if (action.type === "pass" || !hasPendingClaimBlocker(game, option.seatIndex, action.type)) {
+      return { seatIndex: option.seatIndex, action };
+    }
+  }
+
+  return undefined;
+}
+
+function buildBotDecisionContext(game: CoreGame, seatIndex: number): BotDecisionContext {
+  const player = game.players[seatIndex]!;
+  const visibleTileCounts: Record<string, number> = {};
+  const seenTileIds = new Set<string>();
+  const addTile = (tile: Tile): void => {
+    if (tile.kind === "flower") {
+      return;
+    }
+    if (seenTileIds.has(tile.id)) {
+      return;
+    }
+    seenTileIds.add(tile.id);
+    const key = tileKey(tile);
+    visibleTileCounts[key] = (visibleTileCounts[key] ?? 0) + 1;
+  };
+
+  for (const tile of player.hand) {
+    addTile(tile);
+  }
+  for (const publicPlayer of game.players) {
+    for (const tile of publicPlayer.discards) {
+      addTile(tile);
+    }
+    for (const meld of publicPlayer.melds) {
+      for (const tile of meld.tiles) {
+        addTile(tile);
+      }
+    }
+  }
+  if (game.lastDiscard) {
+    addTile(game.lastDiscard.tile);
+  }
+  if (game.claimWindow) {
+    addTile(game.claimWindow.discard);
+  }
+
+  const context: BotDecisionContext = {
+    mode: game.mode,
+    seatWind: player.wind,
+    roundWind: game.roundWind,
+    melds: player.melds,
+    visibleTileCounts,
+    wallCount: game.wall.length
+  };
+  if (game.claimWindow) {
+    context.claimDiscard = game.claimWindow.discard;
+  }
+  return context;
+}
+
+function hasPendingClaimBlocker(game: CoreGame, seatIndex: number, claimType: LegalAction["type"]): boolean {
+  if (!game.claimWindow) {
+    return false;
+  }
+  const priority = claimPriority(claimType);
+  for (const option of game.claimWindow.options) {
+    if (option.seatIndex === seatIndex || game.claimWindow.passedSeatIndices.includes(option.seatIndex)) {
+      continue;
+    }
+    const highest = highestClaimPriority(option.actions);
+    if (highest > priority) {
+      return true;
+    }
+    if (highest === priority && seatDistance(game.claimWindow.fromSeat, option.seatIndex) < seatDistance(game.claimWindow.fromSeat, seatIndex)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function highestClaimPriority(actions: LegalAction[]): number {
+  return Math.max(...actions.map((action) => claimPriority(action.type)));
+}
+
+function claimPriority(type: LegalAction["type"]): number {
+  if (type === "win") return 3;
+  if (type === "pong" || type === "kong") return 2;
+  if (type === "chow") return 1;
+  return 0;
 }
 
 function snapshotRoom(room: Room): RoomSnapshot {

@@ -474,7 +474,7 @@ describe("engine", () => {
     expect(privateState.drawnTileId).toBeUndefined();
     expect(privateState.hand).toHaveLength(14);
     expect(privateState.legalActions.some((action) => action.type === "win")).toBe(false);
-    expect(privateState.legalActions.every((action) => action.type === "discard")).toBe(true);
+    expect(privateState.legalActions.every((action) => action.type === "discard" || action.type === "declareTing")).toBe(true);
     expect(() => applySelfDrawWin(game, 1)).toThrow();
 
     const discardAfterPong = privateState.legalActions.find((action) => action.type === "discard" && action.tileId);
@@ -604,9 +604,90 @@ describe("engine", () => {
 
     const privateState = getPrivateState(game, 0);
 
-    expect(privateState.legalActions.some((action) => action.type === "declareTing")).toBe(false);
     expect(privateState.tingDiscardIds).toContain(discard.id);
     expect(privateState.tingHints.find((hint) => hint.discardTile.id === discard.id)?.winningTiles.map(tileKey)).toEqual(["wind:east"]);
+  });
+
+  it("offers Taiwan ting declaration when a legal post-declaration discard stays tenpai", () => {
+    const game = createGame(seats(), { random: () => 0.42 });
+    const hand = tiles([
+      "characters:1",
+      "characters:2",
+      "characters:3",
+      "characters:4",
+      "characters:5",
+      "characters:6",
+      "characters:7",
+      "characters:8",
+      "characters:9",
+      "dots:2",
+      "dots:3",
+      "dots:4",
+      "dragon:red",
+      "dragon:red",
+      "dragon:red",
+      "wind:east",
+      "bamboo:9"
+    ]);
+    game.players[0]!.hand = hand;
+
+    const privateState = getPrivateState(game, 0);
+
+    expect(privateState.legalActions.some((action) => action.type === "declareTing")).toBe(true);
+  });
+
+  it("does not offer Taiwan ting declaration when the forced discard would break tenpai", () => {
+    const game = createGame(seats(), { random: () => 0.42 });
+    const hand = tiles([
+      "characters:1",
+      "characters:2",
+      "characters:3",
+      "characters:4",
+      "characters:5",
+      "characters:6",
+      "characters:7",
+      "characters:8",
+      "characters:9",
+      "dots:2",
+      "dots:3",
+      "dots:4",
+      "dragon:red",
+      "dragon:red",
+      "dragon:red",
+      "wind:east",
+      "bamboo:9"
+    ]);
+    game.players[0]!.hand = hand;
+    game.players[0]!.drawnTileId = hand[0]!.id;
+
+    const privateState = getPrivateState(game, 0);
+
+    expect(privateState.tingDiscardIds).toContain(hand.at(-1)!.id);
+    expect(privateState.legalActions.some((action) => action.type === "declareTing")).toBe(false);
+  });
+
+  it("does not offer Taiwan ting declaration in riichi mode", () => {
+    const game = createGame(seats(), { mode: "riichi", random: () => 0.42 });
+    game.players[0]!.hand = tiles([
+      "characters:1",
+      "characters:2",
+      "characters:3",
+      "characters:4",
+      "characters:5",
+      "characters:6",
+      "characters:7",
+      "characters:8",
+      "characters:9",
+      "dots:2",
+      "dots:3",
+      "dots:4",
+      "wind:east",
+      "wind:east"
+    ]);
+
+    const privateState = getPrivateState(game, 0);
+
+    expect(privateState.legalActions.some((action) => action.type === "declareTing")).toBe(false);
   });
 
   it("blocks Taiwan ron and self draw after passing a winning discard until a passed hand", () => {
