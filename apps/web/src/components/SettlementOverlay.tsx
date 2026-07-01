@@ -2,7 +2,7 @@ import { Check, X } from "lucide-react";
 import type { GameState, PrivatePlayerState, ScoringResult } from "@taiwan-mahjong/shared";
 import { windFullLabels, windLabels } from "../constants";
 import { formatPoints, formatSeatList, initials, scoreDeltaForSeat, settlementLevel, winModeLabel } from "../utils/labels";
-import { MiniTile, TileButton } from "./Tiles";
+import { MeldTiles, TileButton } from "./Tiles";
 
 export function SettlementOverlay({
   result,
@@ -22,6 +22,11 @@ export function SettlementOverlay({
   const isDraw = result.winMode === "draw";
   const winner = typeof result.winnerSeat === "number" ? game?.players.find((player) => player.seatIndex === result.winnerSeat) : undefined;
   const isWinnerPerspective = !isDraw && privateState !== null && result.winnerSeat === privateState.seatIndex;
+  const winnerIsDealer = game?.mode === "taiwan" && !isDraw && typeof result.winnerSeat === "number" && result.winnerSeat === game.dealerSeat;
+  const displayTai = result.baseTai + (winnerIsDealer ? 1 : 0);
+  const displayPatterns = winnerIsDealer
+    ? [...result.patterns, { id: "dealer-bonus", name: "莊家", tai: 1 }]
+    : result.patterns;
   const displayTiles = result.winnerHand ?? (isWinnerPerspective ? privateState.hand : []);
   const displayMelds = result.winnerMelds ?? [];
   const scoreRows = game?.players.map((player) => ({ player, delta: scoreDeltaForSeat(result, player.seatIndex) })) ?? [];
@@ -34,7 +39,7 @@ export function SettlementOverlay({
           <div>
             <span className="winnerLabel">{isDraw ? "荒牌流局" : winModeLabel(result.winMode)}</span>
             <h2>{isDraw ? result.drawReason ?? "流局" : winner?.name ?? `玩家 ${(result.winnerSeat ?? 0) + 1}`}</h2>
-            <p>{isDraw ? "本局沒有玩家胡牌" : `${windFullLabels[winner?.wind ?? "east"]} · ${settlementLevel(result.baseTai)}`}</p>
+            <p>{isDraw ? "本局沒有玩家胡牌" : `${windFullLabels[winner?.wind ?? "east"]} · ${settlementLevel(displayTai)}`}</p>
           </div>
         </div>
 
@@ -48,9 +53,7 @@ export function SettlementOverlay({
               <>
                 {displayMelds.map((meld) => (
                   <span className="settlementMeld" key={meld.id}>
-                    {meld.tiles.map((tile) => (
-                      <MiniTile key={`${meld.id}-${tile.id}`} tile={tile} />
-                    ))}
+                    <MeldTiles meld={meld} />
                   </span>
                 ))}
                 {displayTiles.map((tile) => (
@@ -64,14 +67,14 @@ export function SettlementOverlay({
 
           <div className="settlementStats">
             <div className="fanDial">
-              <strong>{result.baseTai}</strong>
+              <strong>{displayTai}</strong>
               <span>{game?.mode === "riichi" ? "番" : "台"}</span>
             </div>
             <div className="patternList">
-              {result.patterns.length === 0 ? (
+              {displayPatterns.length === 0 ? (
                 <span className="patternPill">無役種變動</span>
               ) : (
-                result.patterns.map((pattern) => (
+                displayPatterns.map((pattern) => (
                   <span className="patternPill" key={pattern.id}>
                     {pattern.name}
                     {pattern.tai > 0 ? ` ${pattern.tai}${game?.mode === "riichi" ? "番" : "台"}` : ""}
@@ -92,7 +95,7 @@ export function SettlementOverlay({
           </div>
 
           <div className="bigResult">
-            <span>{isDraw ? "NO GAME" : settlementLevel(result.baseTai)}</span>
+            <span>{isDraw ? "NO GAME" : settlementLevel(displayTai)}</span>
             <strong>{formatPoints(Math.max(result.totalGain, 0))} 點</strong>
           </div>
 

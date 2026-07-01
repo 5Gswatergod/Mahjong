@@ -373,6 +373,86 @@ describe("engine", () => {
     expect(game.wall.length).toBeGreaterThanOrEqual(16);
   });
 
+  it("hides every concealed kong tile in public state", () => {
+    const game = createGame(seats(), { random: () => 0.42 });
+    const kongTiles = tiles(["characters:1", "characters:1", "characters:1", "characters:1"]);
+    game.players[0]!.hand = kongTiles;
+
+    applyKong(game, 0, kongTiles.map((candidate) => candidate.id));
+
+    const publicMeld = toPublicGameState(game).players[0]!.melds[0]!;
+    expect(publicMeld.type).toBe("concealedKong");
+    expect(publicMeld.tiles).toHaveLength(4);
+    expect(publicMeld.tiles.every((candidate) => candidate.label === "暗")).toBe(true);
+    expect(publicMeld.tiles.some((candidate) => candidate.suit || candidate.rank || candidate.wind || candidate.dragon)).toBe(false);
+  });
+
+  it("replaces a drawn flower with exactly one supplement tile", () => {
+    const game = createGame(seats(), { random: () => 0.42 });
+    const discardTile = tile("dragon:white", 0);
+    const flowerTile = buildWall().find((candidate) => candidate.kind === "flower" && candidate.flower === "plum")!;
+    const nextLiveTile = tile("characters:9", 0);
+    const supplementTile = tile("bamboo:9", 0);
+    game.currentSeat = 0;
+    game.players[0]!.hand = [discardTile];
+    game.players.forEach((player) => {
+      player.flowers = [];
+    });
+    game.players[1]!.hand = tiles([
+      "characters:1",
+      "characters:2",
+      "characters:3",
+      "characters:4",
+      "characters:5",
+      "characters:6",
+      "dots:1",
+      "dots:2",
+      "dots:3",
+      "bamboo:1",
+      "bamboo:2",
+      "bamboo:3",
+      "wind:east",
+      "wind:south",
+      "wind:west",
+      "dragon:red"
+    ]);
+    game.players[2]!.hand = [];
+    game.players[3]!.hand = [];
+    game.wall = [
+      flowerTile,
+      nextLiveTile,
+      ...tiles([
+        "characters:7",
+        "characters:8",
+        "dots:4",
+        "dots:5",
+        "dots:6",
+        "bamboo:4",
+        "bamboo:5",
+        "bamboo:6",
+        "dragon:green",
+        "dragon:green",
+        "dragon:white",
+        "dragon:white",
+        "wind:north",
+        "wind:north",
+        "wind:west",
+        "wind:south"
+      ]),
+      supplementTile
+    ];
+
+    applyDiscard(game, 0, discardTile.id);
+
+    expect(game.currentSeat).toBe(1);
+    expect(game.players[1]!.flowers).toEqual([flowerTile]);
+    expect(game.players[1]!.hand).toHaveLength(17);
+    expect(game.players[1]!.hand.some((candidate) => candidate.id === supplementTile.id)).toBe(true);
+    expect(game.players[1]!.hand.some((candidate) => candidate.id === nextLiveTile.id)).toBe(false);
+    expect(game.players[1]!.drawnTileId).toBe(supplementTile.id);
+    expect(game.wall[0]?.id).toBe(nextLiveTile.id);
+  });
+
   it("publishes turn deadlines and server time for countdown display", () => {
     const before = Date.now();
     const game = createGame(seats(), { config: { autoDiscardMs: 9000 }, random: () => 0.42 });

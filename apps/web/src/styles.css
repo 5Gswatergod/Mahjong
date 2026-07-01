@@ -942,7 +942,30 @@ input {
 }
 
 .spotMelds {
+  align-items: center;
   justify-content: center;
+}
+
+.spotMeld,
+.concealedMeld {
+  display: inline-flex;
+  align-items: center;
+}
+
+.spotMeld {
+  gap: 3px;
+}
+
+.concealedMeld .tileBacks {
+  gap: 3px;
+  filter: none;
+}
+
+.concealedMeld .tileBacks span {
+  width: 25px;
+  height: 36px;
+  border-radius: 5px;
+  box-shadow: 0 3px 0 rgba(99, 74, 40, 0.52);
 }
 
 .centerConsole {
@@ -2359,6 +2382,10 @@ input {
     grid-template-rows: minmax(340px, 1fr) auto auto;
   }
 
+  .activeGameScene .boardStack {
+    grid-template-rows: minmax(420px, 1fr) auto auto;
+  }
+
   .statusPanel {
     order: 3;
     grid-column: auto;
@@ -2399,7 +2426,7 @@ input {
 
   .spot0 {
     width: min(430px, 86%);
-    bottom: 10px;
+    bottom: 8px;
   }
 
   .spot1 {
@@ -2409,7 +2436,7 @@ input {
   }
 
   .spot2 {
-    top: 40px;
+    top: 12px;
     width: min(370px, 76%);
   }
 
@@ -2453,7 +2480,9 @@ input {
   }
 
   .spot1 .playerSpotStats,
-  .spot3 .playerSpotStats {
+  .spot2 .playerSpotStats,
+  .spot3 .playerSpotStats,
+  .spot0 .playerSpotStats {
     display: none;
   }
 
@@ -2473,14 +2502,97 @@ input {
     height: 31px;
   }
 
+  .concealedMeld .tileBacks span {
+    width: 22px;
+    height: 31px;
+  }
+
+  .river0 {
+    bottom: 18%;
+    max-width: 168px;
+  }
+
+  .river2 {
+    top: 18%;
+    max-width: 168px;
+  }
+
+  .riverLane .miniTile {
+    width: 20px;
+    min-width: 20px;
+    height: 28px;
+  }
+
   .centerConsole {
-    width: min(190px, 48%);
-    min-height: 126px;
-    padding: 9px;
+    top: 51%;
+    width: min(136px, 40%);
+    min-height: 0;
+    padding: 12px 8px 10px;
+    gap: 3px;
+  }
+
+  .windMarker {
+    width: 28px;
+    height: 25px;
+    font-size: 11px;
+  }
+
+  .markerTop {
+    top: -14px;
+  }
+
+  .markerRight {
+    right: -14px;
+  }
+
+  .markerBottom {
+    bottom: -14px;
+  }
+
+  .markerLeft {
+    left: -14px;
+  }
+
+  .roundDial {
+    display: none;
+  }
+
+  .roundDial span,
+  .roundDial strong,
+  .lastDiscardLabel {
+    padding: 2px 3px;
+    font-size: 9px;
   }
 
   .centerPoints strong {
-    font-size: 18px;
+    font-size: 16px;
+  }
+
+  .centerPoints span {
+    font-size: 9px;
+  }
+
+  .turnCountdown {
+    min-width: 92px;
+    min-height: 32px;
+    padding: 3px 5px;
+    gap: 5px;
+  }
+
+  .timerRing {
+    width: 28px;
+    height: 28px;
+  }
+
+  .timerMeta strong,
+  .timerMeta span {
+    font-size: 9px;
+  }
+
+  .lastDiscard .miniTile {
+    width: 22px;
+    min-width: 22px;
+    height: 31px;
   }
 
   .handDock {
@@ -2686,7 +2798,7 @@ input {
   }
 
   .centerConsole {
-    width: 170px;
+    width: min(136px, 40%);
   }
 
   .catalogHeader {
@@ -2738,12 +2850,12 @@ input {
   }
 
   .scaledTableBoard .river0 {
-    bottom: 30%;
+    bottom: 13%;
     max-width: 270px;
   }
 
   .scaledTableBoard .river2 {
-    top: 28%;
+    top: 16%;
     max-width: 270px;
   }
 

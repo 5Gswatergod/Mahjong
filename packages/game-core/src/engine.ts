@@ -715,8 +715,8 @@ function drawNormalTile(game: CoreGame, player: CorePlayer): void {
       if (resolveFlowerDrawWin(game, player, tile)) {
         return;
       }
-      drawSupplementTile(game, player, true);
-      continue;
+      drawSupplementTile(game, player, false);
+      return;
     }
     player.hand.push(tile);
     player.drawnTileId = tile.id;
@@ -1296,11 +1296,21 @@ function publicMelds(melds: Meld[]): Meld[] {
     if (meld.concealed) {
       return {
         ...meld,
-        tiles: meld.tiles.map((tile, index) => (index === 0 || index === meld.tiles.length - 1 ? tile : { ...tile, label: "暗" }))
+        tiles: meld.tiles.map((_, index) => toHiddenTile(meld.id, index))
       };
     }
     return meld;
   });
+}
+
+function toHiddenTile(meldId: string, index: number): Tile {
+  return {
+    id: `${meldId}-hidden-${index}`,
+    kind: "honor",
+    copy: index,
+    label: "暗",
+    sortKey: 0
+  };
 }
 
 function startTurnTimer(game: CoreGame): void {

@@ -3,7 +3,7 @@ import { Bot, RefreshCw } from "lucide-react";
 import type { GameState, PublicPlayerState, RoomSnapshot } from "@taiwan-mahjong/shared";
 import { modeLabels, windLabels } from "../constants";
 import { activeDeadline, formatLatency, formatPoints, initials, phaseLabel } from "../utils/labels";
-import { MiniTile, TileBacks } from "./Tiles";
+import { MeldTiles, MiniTile, TileBacks } from "./Tiles";
 
 const tableStageWidth = 1280;
 const tableStageHeight = 560;
@@ -171,8 +171,6 @@ function PlayerSpot({
   active: boolean;
   isSelf: boolean;
 }) {
-  const meldTiles = player.melds.flatMap((meld) => meld.tiles.map((tile) => ({ tile, meldId: meld.id })));
-
   return (
     <div className={["playerSpot", `spot${distance}`, active ? "active" : "", isSelf ? "self" : ""].filter(Boolean).join(" ")}>
       <div className="playerBadge">
@@ -198,10 +196,12 @@ function PlayerSpot({
         </div>
       )}
 
-      {(meldTiles.length > 0 || player.flowerTiles.length > 0) && (
+      {(player.melds.length > 0 || player.flowerTiles.length > 0) && (
         <div className="spotMelds">
-          {meldTiles.map(({ tile, meldId }) => (
-            <MiniTile key={`${meldId}-${tile.id}`} tile={tile} />
+          {player.melds.map((meld) => (
+            <span className="spotMeld" key={meld.id}>
+              <MeldTiles meld={meld} />
+            </span>
           ))}
           {player.flowerTiles.map((tile) => (
             <MiniTile key={tile.id} tile={tile} flower />

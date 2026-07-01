@@ -1,4 +1,4 @@
-import type { Tile } from "@taiwan-mahjong/shared";
+import type { Meld, Tile } from "@taiwan-mahjong/shared";
 import { tileImagePath } from "../tileAssets";
 
 export function TileBacks({ count, vertical }: { count: number; vertical?: boolean }) {
@@ -55,5 +55,23 @@ export function MiniTile({ tile, flower }: { tile: Tile; flower?: boolean }) {
     <span className={className} title={tile.label} aria-label={tile.label}>
       {imagePath ? <img className="tileImage" src={imagePath} alt="" draggable={false} /> : <span className="tileFallback">{tile.label}</span>}
     </span>
+  );
+}
+
+export function MeldTiles({ meld }: { meld: Meld }) {
+  if (meld.concealed || meld.type === "concealedKong") {
+    return (
+      <span className="concealedMeld" aria-label="暗槓">
+        <TileBacks count={meld.tiles.length} />
+      </span>
+    );
+  }
+
+  return (
+    <>
+      {meld.tiles.map((tile) => (
+        <MiniTile key={`${meld.id}-${tile.id}`} tile={tile} />
+      ))}
+    </>
   );
 }
