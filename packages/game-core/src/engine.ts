@@ -410,7 +410,14 @@ export function applyKong(game: CoreGame, seatIndex: number, tileIds: string[], 
   assertPlayingTurn(game, seatIndex);
   const player = getPlayer(game, seatIndex);
 
+  if (player.declaredRiichi) {
+    throw new Error("立直後不能槓牌。");
+  }
+
   if (meldId) {
+    if (player.declaredTing) {
+      throw new Error("宣告聽牌後不能加槓。");
+    }
     const meld = player.melds.find((candidate) => candidate.id === meldId && candidate.type === "pong");
     if (!meld) {
       throw new Error("找不到可加槓的碰牌。");
@@ -448,6 +455,10 @@ export function applyKong(game: CoreGame, seatIndex: number, tileIds: string[], 
 
   if (tileIds.length !== 4) {
     throw new Error("暗槓需要四張同牌。");
+  }
+  const rawDrawnId = player.drawnTileId?.replace("supplement:", "");
+  if (player.declaredTing && rawDrawnId && tileIds.includes(rawDrawnId)) {
+    throw new Error("宣告聽牌後只能將新摸進的牌摸切。");
   }
   const tiles = tileIds.map((tileId) => removeTileById(player.hand, tileId));
   if (!tiles.every((tile) => sameTileType(tile, tiles[0]!))) {
@@ -553,8 +564,16 @@ export function autoRiichiDiscardIfNeeded(game: CoreGame, seatIndex: number): bo
     return false;
   }
 
+  return autoTingDiscardIfNeeded(game, seatIndex);
+}
+
+export function autoTingDiscardIfNeeded(game: CoreGame, seatIndex: number): boolean {
+  if (game.phase !== "playing" || game.currentSeat !== seatIndex) {
+    return false;
+  }
+
   const player = getPlayer(game, seatIndex);
-  if (!player.declaredRiichi || !player.drawnTileId || canPlayerWin(game, player)) {
+  if (!player.declaredTing || !player.drawnTileId || canPlayerWin(game, player)) {
     return false;
   }
 
@@ -573,13 +592,13 @@ function buildClaimOptions(game: CoreGame, discard: Tile, fromSeat: number): Cla
     if (canPlayerWinWithTile(game, player, discard)) {
       actions.push({ type: "win", fromSeat, tileId: discard.id, description: `胡 ${discard.label}` });
     }
-    if (!player.declaredRiichi && countSameType(player.hand, discard) >= 3) {
+    if (!blocksMeldClaims(player) && countSameType(player.hand, discard) >= 3) {
       actions.push({ type: "kong", fromSeat, tileId: discard.id, description: `槓 ${discard.label}` });
     }
-    if (!player.declaredRiichi && countSameType(player.hand, discard) >= 2) {
+    if (!blocksMeldClaims(player) && countSameType(player.hand, discard) >= 2) {
       actions.push({ type: "pong", fromSeat, tileId: discard.id, description: `碰 ${discard.label}` });
     }
-    if (!player.declaredRiichi && player.seatIndex === nextSeat(fromSeat)) {
+    if (!blocksMeldClaims(player) && player.seatIndex === nextSeat(fromSeat)) {
       for (const chow of possibleChows(player.hand, discard)) {
         actions.push({
           type: "chow",
@@ -1088,6 +1107,7 @@ function getCurrentPlayerKongActions(player: CorePlayer): LegalAction[] {
   }
 
   const actions: LegalAction[] = [];
+  const rawDrawnId = player.drawnTileId?.replace("supplement:", "");
   const byKey = new Map<string, Tile[]>();
   for (const tile of player.hand) {
     const key = tileKey(tile);
@@ -1096,9 +1116,13 @@ function getCurrentPlayerKongActions(player: CorePlayer): LegalAction[] {
     byKey.set(key, bucket);
   }
   for (const tiles of byKey.values()) {
-    if (tiles.length === 4) {
+    if (tiles.length === 4 && (!player.declaredTing || !rawDrawnId || tiles.every((tile) => tile.id !== rawDrawnId))) {
       actions.push({ type: "kong", tileIds: tiles.map((tile) => tile.id), description: `暗槓 ${tiles[0]!.label}` });
     }
+  }
+
+  if (player.declaredTing) {
+    return actions;
   }
 
   for (const meld of player.melds) {
@@ -1116,6 +1140,10 @@ function getCurrentPlayerKongActions(player: CorePlayer): LegalAction[] {
   }
 
   return actions;
+}
+
+function blocksMeldClaims(player: CorePlayer): boolean {
+  return player.declaredTing || player.declaredRiichi;
 }
 
 function getWinningTilesForPlayer(game: CoreGame, seatIndex: number): Tile[] {

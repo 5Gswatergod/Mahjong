@@ -16,7 +16,7 @@ import {
   applyKong,
   applySelfDrawWin,
   autoDiscardIfNeeded,
-  autoRiichiDiscardIfNeeded,
+  autoTingDiscardIfNeeded,
   createGame,
   type CoreGame,
   getPrivateState,
@@ -69,7 +69,7 @@ interface Room {
   updatedAt: number;
   disconnectTimers: Map<string, NodeJS.Timeout>;
   botTimer?: NodeJS.Timeout;
-  autoRiichiTimer?: NodeJS.Timeout;
+  autoTingTimer?: NodeJS.Timeout;
 }
 
 const currentFile = fileURLToPath(import.meta.url);
@@ -592,7 +592,7 @@ function afterGameMutation(room: Room): void {
     io.to(room.code).emit("game.settlement", room.game.settlement);
   }
   scheduleBot(room);
-  scheduleAutoRiichiDiscard(room);
+  scheduleAutoTingDiscard(room);
 }
 
 function broadcastRoom(room: Room): void {
@@ -647,15 +647,15 @@ function scheduleBot(room: Room): void {
   }, 450);
 }
 
-function scheduleAutoRiichiDiscard(room: Room): void {
-  if (room.autoRiichiTimer || !room.game || room.game.mode !== "riichi" || room.game.phase !== "playing") {
+function scheduleAutoTingDiscard(room: Room): void {
+  if (room.autoTingTimer || !room.game || room.game.phase !== "playing") {
     return;
   }
 
   const currentSeat = room.game.currentSeat;
   const seat = room.seats[currentSeat];
   const player = room.game.players[currentSeat];
-  if (!seat || seat.isBot || !player?.declaredRiichi || !player.drawnTileId) {
+  if (!seat || seat.isBot || !player?.declaredTing || !player.drawnTileId) {
     return;
   }
 
@@ -663,14 +663,14 @@ function scheduleAutoRiichiDiscard(room: Room): void {
     return;
   }
 
-  room.autoRiichiTimer = setTimeout(() => {
-    delete room.autoRiichiTimer;
+  room.autoTingTimer = setTimeout(() => {
+    delete room.autoTingTimer;
     if (!room.game) {
       return;
     }
     const seatIndex = room.game.currentSeat;
-    if (autoRiichiDiscardIfNeeded(room.game, seatIndex)) {
-      void persist(room.code, "game.autoRiichiDiscard", { seatIndex });
+    if (autoTingDiscardIfNeeded(room.game, seatIndex)) {
+      void persist(room.code, "game.autoTingDiscard", { seatIndex });
       afterGameMutation(room);
     }
   }, 700);

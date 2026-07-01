@@ -108,6 +108,51 @@ button:disabled {
   font-size: 18px;
 }
 
+.assetWarning {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 90;
+  width: min(360px, calc(100vw - 32px));
+  padding: 10px 10px 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #fff7df;
+  background: rgba(7, 10, 18, 0.86);
+  border: 1px solid rgba(244, 216, 135, 0.34);
+  border-radius: 8px;
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(12px);
+}
+
+.assetWarning span {
+  min-width: 0;
+  flex: 1;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.35;
+}
+
+.assetWarningButton {
+  min-height: 34px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #17332e;
+  background: linear-gradient(180deg, #f3de9b, #d4a647);
+  border: 0;
+  border-radius: 8px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.assetWarningButton:disabled {
+  opacity: 0.72;
+  cursor: progress;
+}
+
 .lobbyAppShell {
   padding: 18px;
   display: grid;

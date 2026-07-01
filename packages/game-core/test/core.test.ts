@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 import type { Meld, PlayerSeat, Tile } from "@taiwan-mahjong/shared";
 import {
   applyClaim,
+  applyDeclareTing,
   applyDiscard,
   applyKong,
   applySelfDrawWin,
   applyDeclareRiichi,
   autoRiichiDiscardIfNeeded,
+  autoTingDiscardIfNeeded,
   buildWall,
   calculateScore,
   canWin,
@@ -770,6 +772,119 @@ describe("engine", () => {
     expect(privateState.legalActions.some((action) => action.type === "declareTing")).toBe(false);
   });
 
+  it("auto-discards a drawn tile after Taiwan ting when self draw is not available", () => {
+    const game = createGame(seats(), { random: () => 0.42 });
+    const drawnTile = tile("bamboo:9", 0);
+    game.currentSeat = 0;
+    game.players[0]!.hand = [
+      ...tiles([
+        "characters:1",
+        "characters:2",
+        "characters:3",
+        "characters:4",
+        "characters:5",
+        "characters:6",
+        "characters:7",
+        "characters:8",
+        "characters:9",
+        "dots:2",
+        "dots:3",
+        "dots:4",
+        "dragon:red",
+        "dragon:red",
+        "dragon:red",
+        "wind:east"
+      ]),
+      drawnTile
+    ];
+    game.players[0]!.drawnTileId = drawnTile.id;
+    game.players[1]!.hand = [];
+    game.players[2]!.hand = [];
+    game.players[3]!.hand = [];
+    game.wall = [
+      tile("wind:north", 3),
+      ...tiles([
+        "characters:7",
+        "characters:8",
+        "characters:9",
+        "dots:1",
+        "dots:2",
+        "dots:3",
+        "dots:4",
+        "dots:5",
+        "dots:6",
+        "bamboo:4",
+        "bamboo:5",
+        "bamboo:6",
+        "dragon:red",
+        "dragon:green",
+        "dragon:white",
+        "wind:south"
+      ])
+    ];
+
+    applyDeclareTing(game, 0);
+
+    expect(autoTingDiscardIfNeeded(game, 0)).toBe(true);
+    expect(game.players[0]!.discards.at(-1)?.id).toBe(drawnTile.id);
+    expect(game.currentSeat).toBe(1);
+  });
+
+  it("does not offer chow pong or exposed kong claims after Taiwan ting", () => {
+    const game = createGame(seats(), { random: () => 0.42 });
+    const discardTile = tile("dragon:red", 3);
+    game.currentSeat = 0;
+    game.players[0]!.hand = [discardTile];
+    game.players[1]!.declaredTing = true;
+    game.players[1]!.hand = tiles([
+      "dragon:red",
+      "dragon:red",
+      "dragon:red",
+      "characters:1",
+      "characters:4",
+      "characters:7",
+      "dots:1",
+      "dots:4",
+      "dots:7",
+      "bamboo:1",
+      "bamboo:4",
+      "bamboo:7",
+      "wind:east",
+      "wind:south",
+      "wind:west",
+      "wind:north"
+    ]);
+    game.players[2]!.hand = [];
+    game.players[3]!.hand = [];
+    game.wall = [
+      tile("bamboo:9", 3),
+      ...tiles([
+        "characters:7",
+        "characters:8",
+        "characters:9",
+        "dots:1",
+        "dots:2",
+        "dots:3",
+        "dots:4",
+        "dots:5",
+        "dots:6",
+        "bamboo:4",
+        "bamboo:5",
+        "bamboo:6",
+        "dragon:green",
+        "dragon:white",
+        "wind:south",
+        "wind:west"
+      ])
+    ];
+
+    applyDiscard(game, 0, discardTile.id);
+
+    expect(game.claimWindow).toBeUndefined();
+    expect(game.phase).toBe("playing");
+    expect(game.currentSeat).toBe(1);
+  });
+
   it("blocks Taiwan ron and self draw after passing a winning discard until a passed hand", () => {
     const game = createGame(seats(), { random: () => 0.42 });
     const discardTile = tile("wind:east", 2);
@@ -1157,6 +1272,98 @@ describe("engine", () => {
     expect(game.players[0]!.drawnTileId).toBe(`supplement:${supplementTile.id}`);
     expect(game.players[0]!.hand.some((candidate) => candidate.id === supplementTile.id)).toBe(true);
     expect(game.wall).toHaveLength(wallLengthBeforeKong - 1);
+  });
+
+  it("allows a Taiwan ting player to declare an original concealed kong without exposing it", () => {
+    const game = createGame(seats(), { random: () => 0.42 });
+    const kongTiles = tiles(["dragon:red", "dragon:red", "dragon:red", "dragon:red"]);
+    const supplementTile = tile("dots:9", 3);
+    game.currentSeat = 0;
+    game.players[0]!.declaredTing = true;
+    game.players[0]!.hand = [
+      ...kongTiles,
+      ...tiles([
+        "characters:1",
+        "characters:2",
+        "characters:3",
+        "characters:4",
+        "characters:5",
+        "characters:6",
+        "dots:1",
+        "dots:2",
+        "dots:3",
+        "bamboo:1",
+        "bamboo:2",
+        "bamboo:3",
+        "wind:east"
+      ])
+    ];
+    game.wall = [
+      ...tiles([
+        "characters:7",
+        "characters:8",
+        "characters:9",
+        "dots:4",
+        "dots:5",
+        "dots:6",
+        "bamboo:4",
+        "bamboo:5",
+        "bamboo:6",
+        "dragon:green",
+        "dragon:green",
+        "dragon:white",
+        "dragon:white",
+        "wind:south",
+        "wind:west",
+        "wind:north"
+      ]),
+      supplementTile
+    ];
+
+    const action = getPrivateState(game, 0).legalActions.find((candidate) => candidate.type === "kong");
+    applyKong(game, 0, kongTiles.map((candidate) => candidate.id));
+
+    const publicMeld = toPublicGameState(game).players[0]!.melds.at(-1)!;
+    expect(action?.description).toBe("暗槓 中");
+    expect(game.players[0]!.melds.at(-1)?.type).toBe("concealedKong");
+    expect(publicMeld.type).toBe("concealedKong");
+    expect(publicMeld.tiles.every((candidate) => candidate.label === "暗")).toBe(true);
+    expect(game.players[0]!.drawnTileId).toBe(`supplement:${supplementTile.id}`);
+  });
+
+  it("does not allow a Taiwan ting player to kong with the newly drawn tile", () => {
+    const game = createGame(seats(), { random: () => 0.42 });
+    const existingTiles = tiles(["dragon:red", "dragon:red", "dragon:red"]);
+    const drawnTile = tile("dragon:red", 3);
+    game.currentSeat = 0;
+    game.players[0]!.declaredTing = true;
+    game.players[0]!.drawnTileId = drawnTile.id;
+    game.players[0]!.hand = [
+      ...existingTiles,
+      ...tiles([
+        "characters:1",
+        "characters:2",
+        "characters:3",
+        "characters:4",
+        "characters:5",
+        "characters:6",
+        "dots:1",
+        "dots:2",
+        "dots:3",
+        "bamboo:1",
+        "bamboo:2",
+        "bamboo:3",
+        "wind:east"
+      ]),
+      drawnTile
+    ];
+
+    const action = getPrivateState(game, 0).legalActions.find((candidate) => candidate.type === "kong");
+
+    expect(action).toBeUndefined();
+    expect(() => applyKong(game, 0, [...existingTiles, drawnTile].map((candidate) => candidate.id))).toThrow(
+      "宣告聽牌後只能將新摸進的牌摸切。"
+    );
   });
 
   it("auto-discards a drawn tile after riichi when self draw is not available", () => {

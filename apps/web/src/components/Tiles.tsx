@@ -1,4 +1,5 @@
 import type { Meld, Tile } from "@taiwan-mahjong/shared";
+import { useEffect, useState } from "react";
 import { tileImagePath } from "../tileAssets";
 
 export function TileBacks({ count, vertical }: { count: number; vertical?: boolean }) {
@@ -42,7 +43,7 @@ export function TileButton({
 
   return (
     <button className={className} disabled={disabled} onClick={onClick} title={tile.label} aria-label={tile.label}>
-      {imagePath ? <img className="tileImage" src={imagePath} alt="" draggable={false} /> : <span className="tileFallback">{tile.label}</span>}
+      <TileFace tile={tile} imagePath={imagePath} />
     </button>
   );
 }
@@ -53,7 +54,7 @@ export function MiniTile({ tile, flower }: { tile: Tile; flower?: boolean }) {
 
   return (
     <span className={className} title={tile.label} aria-label={tile.label}>
-      {imagePath ? <img className="tileImage" src={imagePath} alt="" draggable={false} /> : <span className="tileFallback">{tile.label}</span>}
+      <TileFace tile={tile} imagePath={imagePath} />
     </span>
   );
 }
@@ -74,4 +75,18 @@ export function MeldTiles({ meld }: { meld: Meld }) {
       ))}
     </>
   );
+}
+
+function TileFace({ tile, imagePath }: { tile: Tile; imagePath: string | undefined }) {
+  const [imageFailed, setImageFailed] = useState(false);
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [imagePath]);
+
+  if (!imagePath || imageFailed) {
+    return <span className="tileFallback">{tile.label}</span>;
+  }
+
+  return <img className="tileImage" src={imagePath} alt="" draggable={false} onError={() => setImageFailed(true)} />;
 }

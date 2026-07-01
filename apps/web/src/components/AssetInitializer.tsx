@@ -4,8 +4,7 @@ import { preloadGameAssets, type AssetPreloadProgress } from "../assetPreloader"
 
 type AssetInitState =
   | { status: "loading"; progress: AssetPreloadProgress }
-  | { status: "ready" }
-  | { status: "failed"; progress: AssetPreloadProgress; failedCount: number };
+  | { status: "ready"; failedCount: number; retrying: boolean };
 
 const initialProgress: AssetPreloadProgress = {
   loaded: 0,
@@ -18,7 +17,6 @@ export function AssetInitializer({ children }: { children: ReactNode }) {
   const [reloadToken, setReloadToken] = useState(0);
 
   const retry = useCallback(() => {
-    setState({ status: "loading", progress: initialProgress });
     setReloadToken((current) => current + 1);
   }, []);
 
@@ -28,23 +26,16 @@ export function AssetInitializer({ children }: { children: ReactNode }) {
     void preloadGameAssets(
       (progress) => {
         if (!cancelled) {
-          setState({ status: "loading", progress });
+          setState((current) =>
+            current.status === "ready" ? { ...current, retrying: true } : { status: "loading", progress }
+          );
         }
       },
       { forceReload: reloadToken > 0 }
     ).then(({ failedPaths }) => {
       if (cancelled) return;
 
-      if (failedPaths.length > 0) {
-        setState((current) => ({
-          status: "failed",
-          progress: current.status === "loading" ? current.progress : initialProgress,
-          failedCount: failedPaths.length
-        }));
-        return;
-      }
-
-      setState({ status: "ready" });
+      setState({ status: "ready", failedCount: failedPaths.length, retrying: false });
     });
 
     return () => {
@@ -53,7 +44,20 @@ export function AssetInitializer({ children }: { children: ReactNode }) {
   }, [reloadToken]);
 
   if (state.status === "ready") {
-    return <>{children}</>;
+    return (
+      <>
+        {children}
+        {state.failedCount > 0 ? (
+          <div className="assetWarning" role="status">
+            <span>部分素材載入失敗，已先進入遊戲</span>
+            <button className="assetWarningButton" type="button" onClick={retry} disabled={state.retrying}>
+              <RefreshCw className={state.retrying ? "spin" : undefined} size={16} />
+              {state.retrying ? "重試中" : "重試素材"}
+            </button>
+          </div>
+        ) : null}
+      </>
+    );
   }
 
   const percent = Math.round((state.progress.loaded / Math.max(state.progress.total, 1)) * 100);
@@ -64,20 +68,13 @@ export function AssetInitializer({ children }: { children: ReactNode }) {
         <span className="brandTile">雀</span>
         <div className="assetInitCopy">
           <h1>正在準備牌桌</h1>
-          <p>{state.status === "failed" ? `有 ${state.failedCount} 個素材載入失敗` : "載入牌面與牌桌素材"}</p>
+          <p>載入牌面與牌桌素材</p>
         </div>
         <div className="assetInitProgress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
           <span style={{ width: `${percent}%` }} />
         </div>
         <strong>{percent}%</strong>
-        {state.status === "failed" ? (
-          <button className="secondaryButton" type="button" onClick={retry}>
-            <RefreshCw size={18} />
-            重新載入
-          </button>
-        ) : (
-          <Loader2 className="spin" size={24} />
-        )}
+        <Loader2 className="spin" size={24} />
       </section>
     </main>
   );
