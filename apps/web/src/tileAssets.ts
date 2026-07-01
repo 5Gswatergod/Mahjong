@@ -32,6 +32,17 @@ const flowerAssetPaths: Record<Flower, string> = {
   bamboo: `${tileAssetBase}/flowers/bamboo.svg`
 };
 
+const suitedAssetPaths = Object.values(suitedAssetFolders).flatMap((folder) =>
+  Array.from({ length: 9 }, (_, index) => `${tileAssetBase}/${folder}/${index + 1}.svg`)
+);
+
+export const tileAssetPaths = [
+  ...suitedAssetPaths,
+  ...Object.values(windAssetPaths),
+  ...Object.values(dragonAssetPaths),
+  ...Object.values(flowerAssetPaths)
+];
+
 export function tileImagePath(tile: Tile): string | undefined {
   if (tile.kind === "suited" && tile.suit && isRank(tile.rank)) {
     return `${tileAssetBase}/${suitedAssetFolders[tile.suit]}/${tile.rank}.svg`;
