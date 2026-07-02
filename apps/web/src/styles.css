@@ -217,6 +217,37 @@ button:disabled {
   border-radius: 8px;
 }
 
+.audioSettings {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 75;
+  height: 40px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #fff6dd;
+  background: rgba(7, 10, 18, 0.78);
+  border: 1px solid rgba(244, 216, 135, 0.26);
+  border-radius: 8px;
+  box-shadow: 0 14px 38px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(12px);
+}
+
+.audioSettings input {
+  width: 112px;
+  accent-color: #f4d887;
+}
+
+.audioSettings output {
+  width: 38px;
+  color: #f4d887;
+  font-size: 12px;
+  font-weight: 900;
+  text-align: right;
+}
+
 .entryPanel {
   width: min(620px, 100%);
   padding: 20px;

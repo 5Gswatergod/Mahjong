@@ -17,12 +17,23 @@ import {
 import { ActionDock } from "./components/ActionDock";
 import { Hand } from "./components/Hand";
 import { PatternCatalog } from "./components/PatternCatalog";
+import { AudioSettings, MusicDirector, readStoredMusicVolume } from "./components/GameAudio";
 import { RoomLobby } from "./components/RoomLobby";
 import { defaultRoomConfig, RoomSettingsPanel } from "./components/RoomSettingsPanel";
 import { SettlementOverlay } from "./components/SettlementOverlay";
 import { TableScreen } from "./components/TableScreen";
 import { AuthExpiredError, api, clearSession, readSession, requestGuestSession, saveSession, updateGuestSessionName } from "./api";
 import { modeLabels, windFullLabels } from "./constants";
+import {
+  drawMusicTracks,
+  lobbyMusicTracks,
+  mainMenuMusicTracks,
+  musicTracks,
+  selfDrawMusicTracks,
+  tableMusicTracks,
+  tenpaiMusicTracks,
+  winMusicTracks
+} from "./musicAssets";
 import { buildActionHintIds } from "./utils/actions";
 import { phaseLabel } from "./utils/labels";
 
@@ -52,6 +63,7 @@ export function App() {
   const [clockMs, setClockMs] = useState(() => Date.now());
   const [clockOffsetMs, setClockOffsetMs] = useState(0);
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
+  const [musicVolume, setMusicVolume] = useState(readStoredMusicVolume);
 
   const mySeat = useMemo(() => {
     if (!room || !session) return undefined;
@@ -67,6 +79,8 @@ export function App() {
   const showSettlement = Boolean(settlementResult && dismissedSettlementHandId !== settlementResult.handId);
   const serverNow = clockMs + clockOffsetMs;
   const activeGame = Boolean(game && game.phase !== "waiting" && game.phase !== "settled" && game.phase !== "draw");
+  const currentPlayer = game?.players.find((player) => player.seatIndex === game.currentSeat);
+  const hasTingPlayer = Boolean(game?.players.some((player) => player.declaredTing || player.declaredRiichi));
   const canManageSeats = Boolean(
     room &&
       session &&
@@ -82,6 +96,39 @@ export function App() {
     () => buildActionHintIds(actions, privateState?.hand ?? [], game?.claimWindow?.discard, privateState?.drawnTileId),
     [actions, game?.claimWindow?.discard, privateState?.drawnTileId, privateState?.hand]
   );
+  const activeMusicTrack = useMemo(() => {
+    const trackSeed = game?.handId ?? room?.code ?? "music";
+    const tableTrack = tableMusicTracks[stableIndex(trackSeed, tableMusicTracks.length)] ?? musicTracks.tableOne;
+    const tenpaiTrack = tenpaiMusicTracks[stableIndex(trackSeed, tenpaiMusicTracks.length)] ?? musicTracks.tenpaiOne;
+    const drawTrack = drawMusicTracks[stableIndex(trackSeed, drawMusicTracks.length)] ?? musicTracks.drawOne;
+    const winTrack = winMusicTracks[stableIndex(trackSeed, winMusicTracks.length)] ?? musicTracks.winOne;
+    const selfDrawTrack = selfDrawMusicTracks[stableIndex(trackSeed, selfDrawMusicTracks.length)] ?? musicTracks.selfDrawOne;
+    const mainMenuTrack = mainMenuMusicTracks[stableIndex("main-menu", mainMenuMusicTracks.length)] ?? musicTracks.mainMenuOne;
+    const lobbyTrack = lobbyMusicTracks[stableIndex(room?.code ?? "lobby", lobbyMusicTracks.length)] ?? musicTracks.lobbyOne;
+
+    if (showSettlement && settlementResult) {
+      if (settlementResult.winMode === "draw") {
+        return drawTrack;
+      }
+      if (settlementResult.winMode === "selfDraw" || settlementResult.winMode === "eightFlowers") {
+        return selfDrawTrack;
+      }
+      return winTrack;
+    }
+
+    if (activeGame) {
+      if (game?.phase === "claiming" || hasTingPlayer || currentPlayer?.declaredTing || currentPlayer?.declaredRiichi) {
+        return tenpaiTrack;
+      }
+      return tableTrack;
+    }
+
+    if (room) {
+      return lobbyTrack;
+    }
+
+    return mainMenuTrack;
+  }, [activeGame, currentPlayer?.declaredRiichi, currentPlayer?.declaredTing, game?.phase, hasTingPlayer, room, settlementResult, showSettlement]);
 
   useEffect(() => {
     setSelectedTileId(null);
@@ -493,6 +540,9 @@ export function App() {
 
   return (
     <main className={room ? (activeGame ? "appShell gameAppShell" : "appShell roomLobbyShell") : "appShell lobbyAppShell"}>
+      <MusicDirector track={activeMusicTrack} volume={musicVolume} />
+      <AudioSettings volume={musicVolume} onVolumeChange={setMusicVolume} />
+
       {error && (
         <div className="notice error">
           <WifiOff size={16} />
@@ -628,4 +678,14 @@ export function App() {
       )}
     </main>
   );
+}
+
+function stableIndex(value: string, size: number): number {
+  if (size <= 0) return 0;
+
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+  }
+  return hash % size;
 }

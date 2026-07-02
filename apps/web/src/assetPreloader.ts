@@ -1,6 +1,15 @@
+import { musicAssetPaths } from "./musicAssets";
 import { tileAssetPaths } from "./tileAssets";
 
 const imageAssetPaths = ["/backgrounds/game-table-bg.png", ...tileAssetPaths];
+const audioAssetPaths = [...musicAssetPaths];
+
+type AssetKind = "image" | "audio";
+
+interface PreloadableAsset {
+  kind: AssetKind;
+  path: string;
+}
 
 export interface AssetPreloadProgress {
   loaded: number;
@@ -66,25 +75,43 @@ function createPreloadSession(): AssetPreloadSession {
 }
 
 async function preloadAssets(onProgress: AssetPreloadListener): Promise<AssetPreloadResult> {
-  const uniquePaths = [...new Set(imageAssetPaths)];
+  const uniqueAssets = uniquePreloadableAssets([
+    ...imageAssetPaths.map((path) => ({ kind: "image" as const, path })),
+    ...audioAssetPaths.map((path) => ({ kind: "audio" as const, path }))
+  ]);
   const failedPaths: string[] = [];
 
-  for (const [index, path] of uniquePaths.entries()) {
-    onProgress({ loaded: index, total: uniquePaths.length, currentPath: path });
-    const loaded = await loadImageWithRetries(path, 2);
+  for (const [index, asset] of uniqueAssets.entries()) {
+    onProgress({ loaded: index, total: uniqueAssets.length, currentPath: asset.path });
+    const loaded = await loadAssetWithRetries(asset, 2);
     if (!loaded) {
-      failedPaths.push(path);
+      failedPaths.push(asset.path);
     }
-    onProgress({ loaded: index + 1, total: uniquePaths.length, currentPath: path });
+    onProgress({ loaded: index + 1, total: uniqueAssets.length, currentPath: asset.path });
   }
 
   return { failedPaths };
 }
 
-async function loadImageWithRetries(path: string, retries: number): Promise<boolean> {
+function uniquePreloadableAssets(assets: PreloadableAsset[]): PreloadableAsset[] {
+  const seen = new Set<string>();
+  return assets.filter((asset) => {
+    if (seen.has(asset.path)) {
+      return false;
+    }
+    seen.add(asset.path);
+    return true;
+  });
+}
+
+async function loadAssetWithRetries(asset: PreloadableAsset, retries: number): Promise<boolean> {
   for (let attempt = 0; attempt <= retries; attempt += 1) {
     try {
-      await loadImage(path, 8_000);
+      if (asset.kind === "image") {
+        await loadImage(asset.path, 8_000);
+      } else {
+        await loadAudio(asset.path, 12_000);
+      }
       return true;
     } catch {
       if (attempt === retries) {
@@ -119,5 +146,31 @@ function loadImage(path: string, timeoutMs: number): Promise<void> {
     };
     image.decoding = "async";
     image.src = path;
+  });
+}
+
+function loadAudio(path: string, timeoutMs: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => {
+      controller.abort();
+      reject(new Error(`Timed out loading ${path}`));
+    }, timeoutMs);
+
+    fetch(path, { cache: "force-cache", signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`Failed loading ${path}`);
+        }
+        return response.arrayBuffer();
+      })
+      .then(() => {
+        window.clearTimeout(timeout);
+        resolve();
+      })
+      .catch((error: unknown) => {
+        window.clearTimeout(timeout);
+        reject(error instanceof Error ? error : new Error(`Failed loading ${path}`));
+      });
   });
 }
