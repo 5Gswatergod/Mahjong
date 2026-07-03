@@ -98,6 +98,7 @@ const roomConfigSchema = z
     basePoints: z.number().int().min(0).max(100_000).optional(),
     pointPerTai: z.number().int().min(0).max(10_000).optional(),
     initialCoins: z.number().int().min(1_000).max(100_000).optional(),
+    aiDifficulty: z.enum(["novice", "beginner", "expert"]).optional(),
     disconnectGraceMs: z.number().int().min(10_000).max(300_000).optional(),
     claimWindowMs: z.number().int().min(3_000).max(30_000).optional(),
     autoDiscardMs: z.number().int().min(5_000).max(120_000).optional(),
@@ -452,8 +453,10 @@ function resolveRoomConfig(mode: GameMode, overrides: Partial<GameConfig>): Game
   };
 }
 
-function stripUndefinedConfig(config: Partial<Record<keyof GameConfig, number | undefined>> | undefined): Partial<GameConfig> {
-  return Object.fromEntries(Object.entries(config ?? {}).filter(([, value]) => typeof value === "number")) as Partial<GameConfig>;
+function stripUndefinedConfig(
+  config: Partial<Record<keyof GameConfig, GameConfig[keyof GameConfig] | undefined>> | undefined
+): Partial<GameConfig> {
+  return Object.fromEntries(Object.entries(config ?? {}).filter(([, value]) => value !== undefined)) as Partial<GameConfig>;
 }
 
 function joinRoom(room: Room, session: GuestSession): PlayerSeat {
@@ -789,6 +792,7 @@ function buildBotDecisionContext(game: CoreGame, seatIndex: number): BotDecision
 
   const context: BotDecisionContext = {
     mode: game.mode,
+    difficulty: game.config.aiDifficulty,
     seatWind: player.wind,
     roundWind: game.roundWind,
     melds: player.melds,

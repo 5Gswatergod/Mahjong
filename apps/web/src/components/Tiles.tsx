@@ -59,8 +59,18 @@ export function MiniTile({ tile, flower }: { tile: Tile; flower?: boolean }) {
   );
 }
 
-export function MeldTiles({ meld }: { meld: Meld }) {
+export function MeldTiles({ meld, revealConcealed }: { meld: Meld; revealConcealed?: boolean }) {
   if (meld.concealed || meld.type === "concealedKong") {
+    if (revealConcealed && meld.tiles[0]) {
+      return (
+        <span className="concealedMeld revealed" aria-label={`暗槓 ${meld.tiles[0].label}`}>
+          <TileBacks count={1} />
+          <MiniTile tile={meld.tiles[0]} />
+          <TileBacks count={2} />
+        </span>
+      );
+    }
+
     return (
       <span className="concealedMeld" aria-label="暗槓">
         <TileBacks count={meld.tiles.length} />

@@ -113,7 +113,7 @@ button:disabled {
   right: 16px;
   bottom: 16px;
   z-index: 90;
-  width: min(360px, calc(100vw - 32px));
+  width: min(330px, calc(100vw - 32px));
   padding: 10px 10px 10px 12px;
   display: flex;
   align-items: center;
@@ -124,6 +124,7 @@ button:disabled {
   border-radius: 8px;
   box-shadow: 0 16px 44px rgba(0, 0, 0, 0.34);
   backdrop-filter: blur(12px);
+  animation: assetWarningIn 0.18s ease-out;
 }
 
 .assetWarning span {
@@ -151,6 +152,30 @@ button:disabled {
 .assetWarningButton:disabled {
   opacity: 0.72;
   cursor: progress;
+}
+
+.assetWarningClose {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  color: #fff7df;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 232, 178, 0.18);
+  border-radius: 8px;
+}
+
+@keyframes assetWarningIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .lobbyAppShell {
@@ -217,33 +242,73 @@ button:disabled {
   border-radius: 8px;
 }
 
-.audioSettings {
+.audioBackdrop {
   position: fixed;
-  top: 12px;
-  right: 12px;
-  z-index: 75;
-  height: 40px;
-  padding: 0 10px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #fff6dd;
-  background: rgba(7, 10, 18, 0.78);
-  border: 1px solid rgba(244, 216, 135, 0.26);
-  border-radius: 8px;
-  box-shadow: 0 14px 38px rgba(0, 0, 0, 0.28);
-  backdrop-filter: blur(12px);
+  inset: 0;
+  z-index: 56;
+  padding: 24px;
+  display: grid;
+  place-items: center;
+  background: rgba(3, 5, 10, 0.62);
+  backdrop-filter: blur(8px);
 }
 
-.audioSettings input {
-  width: 112px;
+.audioPanel {
+  position: relative;
+  width: min(420px, 100%);
+  overflow: hidden;
+  background: #0c1421;
+  border: 1px solid rgba(245, 202, 96, 0.32);
+  border-radius: 8px;
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.52);
+}
+
+.audioHeader {
+  min-height: 92px;
+  padding: 22px 64px 18px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  background:
+    linear-gradient(118deg, rgba(42, 80, 98, 0.94), rgba(21, 35, 55, 0.96) 58%, rgba(12, 17, 28, 0.98)),
+    radial-gradient(circle at 82% 22%, rgba(245, 202, 96, 0.16), transparent 28%);
+  border-bottom: 1px solid rgba(255, 232, 178, 0.14);
+}
+
+.audioHeader h2 {
+  margin: 6px 0 0;
+  color: #fff7df;
+  font-size: 24px;
+}
+
+.audioKicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #f4d887;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.audioControl {
+  min-height: 104px;
+  padding: 24px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 48px;
+  align-items: center;
+  gap: 14px;
+  color: #fff7df;
+}
+
+.audioControl input {
+  width: 100%;
   accent-color: #f4d887;
 }
 
-.audioSettings output {
-  width: 38px;
+.audioControl output {
   color: #f4d887;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 900;
   text-align: right;
 }
@@ -482,6 +547,34 @@ input {
   font-style: normal;
   font-weight: 900;
   transform: translateY(-50%);
+}
+
+.difficultyPicker {
+  min-height: 42px;
+  padding: 4px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  background: rgba(21, 35, 55, 0.08);
+  border: 1px solid rgba(21, 35, 55, 0.12);
+  border-radius: 8px;
+}
+
+.difficultyOption {
+  min-width: 0;
+  padding: 0 8px;
+  color: #293242;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.difficultyOption.active {
+  color: #fff9ed;
+  background: #1f6f8b;
+  border-color: #1f6f8b;
 }
 
 .subtleButton {
@@ -1112,6 +1205,21 @@ input {
   box-shadow: 0 3px 0 rgba(99, 74, 40, 0.52);
 }
 
+.concealedMeld.revealed {
+  gap: 3px;
+}
+
+.concealedMeld.revealed .tileBacks {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.concealedMeld.revealed .miniTile {
+  width: 25px;
+  min-width: 25px;
+  height: 36px;
+}
+
 .centerConsole {
   position: absolute;
   left: 50%;
@@ -1656,6 +1764,10 @@ input {
   border-color: rgba(245, 202, 96, 0.62);
 }
 
+.handDock.hasTingHint {
+  grid-template-columns: 48px minmax(0, 1fr) minmax(126px, 174px);
+}
+
 .handStatus {
   min-height: 72px;
   display: grid;
@@ -1682,6 +1794,47 @@ input {
 
 .handTiles::-webkit-scrollbar {
   display: none;
+}
+
+.handTingHint {
+  min-width: 0;
+  min-height: 72px;
+  padding: 8px;
+  display: grid;
+  align-content: center;
+  gap: 7px;
+  color: #fff7df;
+  background: rgba(42, 64, 84, 0.72);
+  border: 1px solid rgba(245, 202, 96, 0.34);
+  border-radius: 8px;
+}
+
+.handTingHint strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #f4d887;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.handTingTiles {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.handTingTiles::-webkit-scrollbar {
+  display: none;
+}
+
+.handTingTiles .miniTile {
+  width: 22px;
+  min-width: 22px;
+  height: 31px;
 }
 
 .tileButton {
@@ -2505,6 +2658,21 @@ input {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .handDock.hasTingHint {
+    grid-template-columns: 48px minmax(0, 1fr);
+  }
+
+  .handTingHint {
+    grid-column: 2;
+    min-height: 52px;
+  }
+
+  .handTingTiles .miniTile {
+    width: 20px;
+    min-width: 20px;
+    height: 28px;
+  }
+
   .roomLobby {
     grid-template-columns: 1fr;
   }
@@ -2882,6 +3050,19 @@ input {
     min-height: 58px;
   }
 
+  .handDock.hasTingHint {
+    grid-template-columns: 42px minmax(0, 1fr) minmax(104px, 136px);
+  }
+
+  .handTingHint {
+    min-height: 58px;
+    padding: 6px;
+  }
+
+  .handTingHint strong {
+    font-size: 12px;
+  }
+
   .tileButton {
     flex-basis: 38px;
     width: 38px;
@@ -2920,6 +3101,10 @@ input {
   .iconButton {
     width: 38px;
     min-height: 38px;
+  }
+
+  .handDock.hasTingHint {
+    grid-template-columns: 42px minmax(0, 1fr);
   }
 
   .boardStack {

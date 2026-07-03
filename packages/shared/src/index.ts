@@ -2,6 +2,7 @@ export type Suit = "characters" | "dots" | "bamboo";
 export type Wind = "east" | "south" | "west" | "north";
 export type Dragon = "red" | "green" | "white";
 export type GameMode = "taiwan" | "riichi";
+export type BotDifficulty = "novice" | "beginner" | "expert";
 export type Flower =
   | "spring"
   | "summer"
@@ -59,6 +60,7 @@ export interface GameConfig {
   basePoints: number;
   pointPerTai: number;
   initialCoins: number;
+  aiDifficulty: BotDifficulty;
   disconnectGraceMs: number;
   claimWindowMs: number;
   autoDiscardMs: number;
@@ -69,6 +71,7 @@ export const DEFAULT_GAME_CONFIG: GameConfig = {
   basePoints: 100,
   pointPerTai: 20,
   initialCoins: 10000,
+  aiDifficulty: "beginner",
   disconnectGraceMs: 90_000,
   claimWindowMs: 8_000,
   autoDiscardMs: 12_000,
@@ -185,6 +188,7 @@ export interface PublicPlayerState extends PlayerSeat {
 export interface PrivatePlayerState {
   seatIndex: number;
   hand: Tile[];
+  privateMelds: Meld[];
   legalActions: LegalAction[];
   winningTiles: Tile[];
   drawnTileId?: string;

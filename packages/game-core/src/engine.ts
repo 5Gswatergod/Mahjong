@@ -228,6 +228,7 @@ export function getPrivateState(game: CoreGame, seatIndex: number): PrivatePlaye
   return {
     seatIndex,
     hand: orderPrivateHand(player.hand, rawDrawnId),
+    privateMelds: player.melds,
     legalActions: getLegalActions(game, seatIndex),
     winningTiles: getWinningTilesForPlayer(game, seatIndex),
     ...(rawDrawnId ? { drawnTileId: rawDrawnId } : {}),

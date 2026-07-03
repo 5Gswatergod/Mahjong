@@ -17,7 +17,7 @@ import {
 import { ActionDock } from "./components/ActionDock";
 import { Hand } from "./components/Hand";
 import { PatternCatalog } from "./components/PatternCatalog";
-import { AudioSettings, MusicDirector, readStoredMusicVolume } from "./components/GameAudio";
+import { AudioSettings, AudioSettingsButton, MusicDirector, readStoredMusicVolume } from "./components/GameAudio";
 import { RoomLobby } from "./components/RoomLobby";
 import { defaultRoomConfig, RoomSettingsPanel } from "./components/RoomSettingsPanel";
 import { SettlementOverlay } from "./components/SettlementOverlay";
@@ -60,6 +60,7 @@ export function App() {
   const [selectedTileId, setSelectedTileId] = useState<string | null>(null);
   const [dismissedSettlementHandId, setDismissedSettlementHandId] = useState<string | null>(null);
   const [showPatternCatalog, setShowPatternCatalog] = useState(false);
+  const [showAudioSettings, setShowAudioSettings] = useState(false);
   const [clockMs, setClockMs] = useState(() => Date.now());
   const [clockOffsetMs, setClockOffsetMs] = useState(0);
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
@@ -80,6 +81,8 @@ export function App() {
   const serverNow = clockMs + clockOffsetMs;
   const activeGame = Boolean(game && game.phase !== "waiting" && game.phase !== "settled" && game.phase !== "draw");
   const currentPlayer = game?.players.find((player) => player.seatIndex === game.currentSeat);
+  const selfPlayer = mySeat ? game?.players.find((player) => player.seatIndex === mySeat.seatIndex) : undefined;
+  const showHandTingHint = Boolean(selfPlayer?.declaredTing || selfPlayer?.declaredRiichi);
   const hasTingPlayer = Boolean(game?.players.some((player) => player.declaredTing || player.declaredRiichi));
   const canManageSeats = Boolean(
     room &&
@@ -541,7 +544,6 @@ export function App() {
   return (
     <main className={room ? (activeGame ? "appShell gameAppShell" : "appShell roomLobbyShell") : "appShell lobbyAppShell"}>
       <MusicDirector track={activeMusicTrack} volume={musicVolume} />
-      <AudioSettings volume={musicVolume} onVolumeChange={setMusicVolume} />
 
       {error && (
         <div className="notice error">
@@ -617,6 +619,7 @@ export function App() {
               </div>
             </div>
             <div className="gameHeaderActions">
+              <AudioSettingsButton volume={musicVolume} onClick={() => setShowAudioSettings(true)} />
               <button className="iconButton" onClick={() => setShowPatternCatalog(true)} title="牌型目錄">
                 <BookOpen size={18} />
               </button>
@@ -632,10 +635,20 @@ export function App() {
           {activeGame ? (
             <div className="gameScene activeGameScene">
               <div className="boardStack">
-                <TableScreen room={room} game={game} mySeatIndex={mySeat?.seatIndex} myTurn={Boolean(myTurn)} serverNow={serverNow} latencyMs={latencyMs} />
+                <TableScreen
+                  room={room}
+                  game={game}
+                  mySeatIndex={mySeat?.seatIndex}
+                  privateMelds={privateState?.privateMelds ?? []}
+                  myTurn={Boolean(myTurn)}
+                  serverNow={serverNow}
+                  latencyMs={latencyMs}
+                />
                 <ActionDock actions={visibleActions} hand={privateState?.hand ?? []} claimDiscard={game?.claimWindow?.discard} onAction={triggerAction} />
                 <Hand
                   tiles={privateState?.hand ?? []}
+                  winningTiles={privateState?.winningTiles ?? []}
+                  showTingHint={showHandTingHint}
                   discardableIds={discardableIds}
                   selectedTileId={selectedTileId}
                   drawnTileId={privateState?.drawnTileId}
@@ -674,6 +687,9 @@ export function App() {
           )}
 
           {showPatternCatalog && <PatternCatalog onClose={() => setShowPatternCatalog(false)} />}
+          {showAudioSettings && (
+            <AudioSettings volume={musicVolume} onVolumeChange={setMusicVolume} onClose={() => setShowAudioSettings(false)} />
+          )}
         </section>
       )}
     </main>

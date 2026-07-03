@@ -4,6 +4,7 @@ import type { GameState, RoomSnapshot } from "@taiwan-mahjong/shared";
 import { modeLabels } from "../constants";
 import { formatPoints, phaseLabel } from "../utils/labels";
 import { SeatManager } from "./SeatManager";
+import { aiDifficultyLabels } from "./RoomSettingsPanel";
 import { TableScreen } from "./TableScreen";
 
 export function RoomLobby({
@@ -53,7 +54,15 @@ export function RoomLobby({
       </div>
 
       <div className="lobbyTableArea">
-        <TableScreen room={room} game={null} mySeatIndex={mySeatIndex} myTurn={false} serverNow={serverNow} latencyMs={latencyMs} />
+        <TableScreen
+          room={room}
+          game={null}
+          mySeatIndex={mySeatIndex}
+          privateMelds={[]}
+          myTurn={false}
+          serverNow={serverNow}
+          latencyMs={latencyMs}
+        />
         <div className="lobbyReadyBar">
           <button className={mySeatReady ? "readyButton ready" : "readyButton"} onClick={onReady} disabled={!canReady}>
             <Check size={18} />
@@ -107,6 +116,10 @@ function LobbyInfo({ room, game, occupiedSeats }: { room: RoomSnapshot; game: Ga
           <dd>
             <Clock size={13} /> {Math.round(room.config.autoDiscardMs / 1000)} 秒
           </dd>
+        </div>
+        <div>
+          <dt>AI 難度</dt>
+          <dd>{aiDifficultyLabels[room.config.aiDifficulty]}</dd>
         </div>
       </dl>
     </aside>

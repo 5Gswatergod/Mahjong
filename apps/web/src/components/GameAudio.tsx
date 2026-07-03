@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
-import { Volume1, Volume2, VolumeX } from "lucide-react";
+import { Volume1, Volume2, VolumeX, X } from "lucide-react";
 import type { MusicTrack } from "../musicAssets";
 
 const musicVolumeStorageKey = "taiwanMahjong.musicVolume";
@@ -18,23 +18,57 @@ export function readStoredMusicVolume(): number {
   return Number.isFinite(parsed) ? clampVolume(parsed) : 0.55;
 }
 
-export function AudioSettings({ volume, onVolumeChange }: { volume: number; onVolumeChange: (volume: number) => void }) {
+export function AudioSettingsButton({ volume, onClick }: { volume: number; onClick: () => void }) {
+  const Icon = volume <= 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2;
+
+  return (
+    <button className="iconButton" type="button" onClick={onClick} title="音樂音量">
+      <Icon size={18} />
+    </button>
+  );
+}
+
+export function AudioSettings({
+  volume,
+  onVolumeChange,
+  onClose
+}: {
+  volume: number;
+  onVolumeChange: (volume: number) => void;
+  onClose: () => void;
+}) {
   const percent = Math.round(volume * 100);
   const Icon = volume <= 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2;
 
   return (
-    <div className="audioSettings" aria-label="音樂音量">
-      <Icon size={18} />
-      <input
-        type="range"
-        min={0}
-        max={100}
-        step={1}
-        value={percent}
-        aria-label="音樂音量"
-        onChange={(event) => onVolumeChange(clampVolume(Number(event.currentTarget.value) / 100))}
-      />
-      <output>{percent}%</output>
+    <div className="audioBackdrop" role="dialog" aria-modal="true" aria-label="音樂音量">
+      <section className="audioPanel">
+        <header className="audioHeader">
+          <div>
+            <span className="audioKicker">
+              <Icon size={16} />
+              音樂
+            </span>
+            <h2>音量設定</h2>
+          </div>
+          <button className="closeSettlement" type="button" onClick={onClose} title="關閉音量設定">
+            <X size={18} />
+          </button>
+        </header>
+        <div className="audioControl" aria-label="音樂音量">
+          <Icon size={22} />
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={1}
+            value={percent}
+            aria-label="音樂音量"
+            onChange={(event) => onVolumeChange(clampVolume(Number(event.currentTarget.value) / 100))}
+          />
+          <output>{percent}%</output>
+        </div>
+      </section>
     </div>
   );
 }

@@ -5,10 +5,11 @@ import {
   keySuit,
   tileKey
 } from "@taiwan-mahjong/game-core";
-import type { GameMode, LegalAction, Meld, PrivatePlayerState, Tile, Wind } from "@taiwan-mahjong/shared";
+import type { BotDifficulty, GameMode, LegalAction, Meld, PrivatePlayerState, Tile, Wind } from "@taiwan-mahjong/shared";
 
 export interface BotDecisionContext {
   mode?: GameMode;
+  difficulty?: BotDifficulty;
   seatWind?: Wind;
   roundWind?: Wind;
   melds?: Meld[];
@@ -19,6 +20,7 @@ export interface BotDecisionContext {
 
 interface NormalizedBotContext {
   mode: GameMode;
+  difficulty: BotDifficulty;
   meldCount: number;
   visibleTileCounts: Record<string, number>;
   wallCount: number;
@@ -70,11 +72,16 @@ export function chooseBotClaimAction(
   }
 
   const normalized = normalizeContext(context, context?.claimDiscard ? [...privateState.hand, context.claimDiscard] : privateState.hand);
+  if (normalized.difficulty === "novice") {
+    return pass ?? actions[0]!;
+  }
+
   const before = scoreTiles(privateState.hand, normalized);
   const claimCandidates = actions
     .filter((action) => action.type === "chow" || action.type === "pong" || action.type === "kong")
     .map((action) => scoreClaimAction(action, privateState.hand, before, normalized))
     .filter((candidate): candidate is ClaimCandidate => Boolean(candidate))
+    .filter((candidate) => normalized.difficulty === "expert" || candidate.score.shanten < before.shanten || candidate.valuable)
     .sort(compareClaimCandidates);
 
   return claimCandidates[0]?.action ?? pass ?? actions[0]!;
@@ -85,10 +92,14 @@ export function chooseBotTurnAction(privateState: PrivatePlayerState, context?: 
   const win = actions.find((action) => action.type === "win");
   if (win) return win;
 
+  const normalized = normalizeContext(context, privateState.hand);
+  if (normalized.difficulty === "novice") {
+    return chooseNoviceTurnAction(actions);
+  }
+
   const riichi = actions.find((action) => action.type === "declareRiichi");
   if (riichi) return riichi;
 
-  const normalized = normalizeContext(context, privateState.hand);
   const declareTing = actions.find((action) => action.type === "declareTing");
   if (declareTing && shouldDeclareTing(privateState, normalized)) {
     return declareTing;
@@ -100,6 +111,10 @@ export function chooseBotTurnAction(privateState: PrivatePlayerState, context?: 
   }
 
   return chooseBestDiscardAction(privateState, normalized)?.action ?? actions.find((action) => action.type === "pass");
+}
+
+function chooseNoviceTurnAction(actions: LegalAction[]): LegalAction | undefined {
+  return actions.find((action) => action.type === "discard" && action.tileId) ?? actions.find((action) => action.type === "pass");
 }
 
 function shouldDeclareTing(privateState: PrivatePlayerState, context: NormalizedBotContext): boolean {
@@ -192,6 +207,7 @@ function scoreClaimAction(
   const afterClaimState: PrivatePlayerState = {
     seatIndex: 0,
     hand: claimedHand,
+    privateMelds: [],
     legalActions: discardActions,
     winningTiles: [],
     tingDiscardIds: [],
@@ -481,6 +497,7 @@ function remainingCopies(key: string, context: NormalizedBotContext): number {
 function normalizeContext(context: BotDecisionContext | undefined, knownTiles: Tile[]): NormalizedBotContext {
   const normalized: NormalizedBotContext = {
     mode: context?.mode ?? "taiwan",
+    difficulty: context?.difficulty ?? "beginner",
     meldCount: context?.melds?.length ?? 0,
     visibleTileCounts: context?.visibleTileCounts ? { ...context.visibleTileCounts } : countPlayableTiles(knownTiles),
     wallCount: context?.wallCount ?? 0

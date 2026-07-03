@@ -20,6 +20,7 @@ function privateState(hand: Tile[], legalActions: LegalAction[] = discardActions
   return {
     seatIndex: 0,
     hand,
+    privateMelds: [],
     legalActions,
     winningTiles: [],
     tingDiscardIds: [],
@@ -172,6 +173,38 @@ describe("bot policy", () => {
     expect(action?.type).toBe("kong");
   });
 
+  it("novice difficulty discards instead of declaring ting or kong", () => {
+    const hand = tiles([
+      "characters:1",
+      "characters:2",
+      "characters:3",
+      "dots:1",
+      "dots:2",
+      "dots:3",
+      "bamboo:1",
+      "bamboo:2",
+      "bamboo:3",
+      "dragon:green",
+      "dragon:green",
+      "dragon:red",
+      "dragon:red",
+      "dragon:red",
+      "dragon:red",
+      "characters:4",
+      "characters:5"
+    ]);
+    const redTiles = hand.filter((candidate) => tileKey(candidate) === "dragon:red");
+    const actions: LegalAction[] = [
+      { type: "declareTing" },
+      { type: "kong", tileIds: redTiles.map((candidate) => candidate.id) },
+      ...discardActions(hand)
+    ];
+
+    const action = chooseBotTurnAction(privateState(hand, actions), context(hand, { difficulty: "novice" }));
+
+    expect(action?.type).toBe("discard");
+  });
+
   it("takes a winning claim before evaluating melds", () => {
     const hand = tiles(["characters:1", "characters:2"]);
     const discard = tile("characters:3", 0);
@@ -182,6 +215,19 @@ describe("bot policy", () => {
     );
 
     expect(action.type).toBe("win");
+  });
+
+  it("novice difficulty passes non-winning claims", () => {
+    const hand = tiles(["dragon:red", "dragon:red", "characters:2", "characters:3"]);
+    const discard = tile("dragon:red", 2);
+
+    const action = chooseBotClaimAction(
+      [{ type: "pong", tileId: discard.id }, { type: "pass" }],
+      privateState(hand),
+      context([...hand, discard], { claimDiscard: discard, difficulty: "novice" })
+    );
+
+    expect(action.type).toBe("pass");
   });
 
   it("passes on a claim that breaks a ready hand", () => {

@@ -383,10 +383,13 @@ describe("engine", () => {
     applyKong(game, 0, kongTiles.map((candidate) => candidate.id));
 
     const publicMeld = toPublicGameState(game).players[0]!.melds[0]!;
+    const privateMeld = getPrivateState(game, 0).privateMelds[0]!;
     expect(publicMeld.type).toBe("concealedKong");
     expect(publicMeld.tiles).toHaveLength(4);
     expect(publicMeld.tiles.every((candidate) => candidate.label === "暗")).toBe(true);
     expect(publicMeld.tiles.some((candidate) => candidate.suit || candidate.rank || candidate.wind || candidate.dragon)).toBe(false);
+    expect(privateMeld.type).toBe("concealedKong");
+    expect(privateMeld.tiles.map(tileKey)).toEqual(["characters:1", "characters:1", "characters:1", "characters:1"]);
   });
 
   it("replaces a drawn flower with exactly one supplement tile", () => {

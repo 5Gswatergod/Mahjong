@@ -1,6 +1,6 @@
 import { type CSSProperties, useLayoutEffect, useRef, useState } from "react";
 import { Bot, RefreshCw } from "lucide-react";
-import type { GameState, PublicPlayerState, RoomSnapshot } from "@taiwan-mahjong/shared";
+import type { GameState, Meld, PublicPlayerState, RoomSnapshot } from "@taiwan-mahjong/shared";
 import { modeLabels, windLabels } from "../constants";
 import { activeDeadline, formatLatency, formatPoints, initials, phaseLabel } from "../utils/labels";
 import { MeldTiles, MiniTile, TileBacks } from "./Tiles";
@@ -12,6 +12,7 @@ export function TableScreen({
   room,
   game,
   mySeatIndex,
+  privateMelds,
   myTurn,
   serverNow,
   latencyMs
@@ -19,6 +20,7 @@ export function TableScreen({
   room: RoomSnapshot;
   game: GameState | null;
   mySeatIndex: number | undefined;
+  privateMelds: Meld[];
   myTurn: boolean;
   serverNow: number;
   latencyMs: number | null;
@@ -81,6 +83,7 @@ export function TableScreen({
           distance={distance}
           active={game.currentSeat === player.seatIndex}
           isSelf={player.seatIndex === mySeatIndex}
+          privateMelds={player.seatIndex === mySeatIndex ? privateMelds : undefined}
         />
       ))}
 
@@ -164,13 +167,17 @@ function PlayerSpot({
   player,
   distance,
   active,
-  isSelf
+  isSelf,
+  privateMelds
 }: {
   player: PublicPlayerState;
   distance: number;
   active: boolean;
   isSelf: boolean;
+  privateMelds: Meld[] | undefined;
 }) {
+  const displayMelds = privateMelds ?? player.melds;
+
   return (
     <div className={["playerSpot", `spot${distance}`, active ? "active" : "", isSelf ? "self" : ""].filter(Boolean).join(" ")}>
       <div className="playerBadge">
@@ -186,7 +193,7 @@ function PlayerSpot({
 
       <div className="playerSpotStats">
         <span>{player.handCount} 張</span>
-        <span>{player.melds.length} 副露</span>
+        <span>{displayMelds.length} 副露</span>
         {player.flowerTiles.length > 0 && <span>{player.flowerTiles.length} 花</span>}
       </div>
 
@@ -196,11 +203,11 @@ function PlayerSpot({
         </div>
       )}
 
-      {(player.melds.length > 0 || player.flowerTiles.length > 0) && (
+      {(displayMelds.length > 0 || player.flowerTiles.length > 0) && (
         <div className="spotMelds">
-          {player.melds.map((meld) => (
+          {displayMelds.map((meld) => (
             <span className="spotMeld" key={meld.id}>
-              <MeldTiles meld={meld} />
+              <MeldTiles meld={meld} revealConcealed={isSelf} />
             </span>
           ))}
           {player.flowerTiles.map((tile) => (
