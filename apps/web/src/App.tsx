@@ -685,7 +685,7 @@ export function App() {
             />
           )}
 
-          {showPatternCatalog && <PatternCatalog onClose={() => setShowPatternCatalog(false)} />}
+          {showPatternCatalog && <PatternCatalog mode={room.mode} onClose={() => setShowPatternCatalog(false)} />}
           {showAudioSettings && (
             <AudioSettings volume={musicVolume} onVolumeChange={setMusicVolume} onClose={() => setShowAudioSettings(false)} />
           )}

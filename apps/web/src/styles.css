@@ -2158,10 +2158,30 @@ input {
   overflow: auto;
 }
 
+.catalogGroup {
+  display: grid;
+  gap: 6px;
+}
+
+.catalogSectionTitle {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  padding: 10px 12px 4px;
+  color: #f4d887;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.catalogSectionTitle span {
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(245, 202, 96, 0.36);
+}
+
 .catalogRow {
   min-height: 46px;
   display: grid;
-  grid-template-columns: minmax(108px, 150px) minmax(78px, 104px) minmax(0, 1fr);
+  grid-template-columns: minmax(108px, 150px) minmax(98px, 164px) minmax(0, 1fr);
   align-items: center;
   gap: 12px;
   padding: 9px 12px;
@@ -2190,12 +2210,15 @@ input {
 .catalogTai {
   width: fit-content;
   min-width: 40px;
+  max-width: 100%;
   padding: 4px 8px;
   color: #13221f;
   background: #f4d887;
   border-radius: 6px;
   font-size: 13px;
   font-weight: 900;
+  line-height: 1.25;
+  overflow-wrap: break-word;
   text-align: center;
 }
 
