@@ -8,7 +8,6 @@ import {
   applySelfDrawWin,
   applyDeclareRiichi,
   autoRiichiDiscardIfNeeded,
-  autoTingDiscardIfNeeded,
   buildWall,
   calculateScore,
   canWin,
@@ -721,6 +720,40 @@ describe("engine", () => {
     expect(privateState.legalActions.some((action) => action.type === "declareTing")).toBe(true);
   });
 
+  it("auto-discards the best waiting tile when declaring Taiwan ting", () => {
+    const game = createGame(seats(), { random: () => 0.42 });
+    const hand = tiles([
+      "characters:4",
+      "characters:5",
+      "characters:6",
+      "dots:4",
+      "dots:5",
+      "dots:6",
+      "bamboo:4",
+      "bamboo:5",
+      "bamboo:6",
+      "dragon:red",
+      "dragon:red",
+      "dragon:red",
+      "dragon:green",
+      "dragon:green",
+      "characters:1",
+      "characters:2",
+      "characters:3"
+    ]);
+    game.currentSeat = 0;
+    game.players[0]!.hand = hand;
+    game.players[1]!.hand = [];
+    game.players[2]!.hand = [];
+    game.players[3]!.hand = [];
+
+    applyDeclareTing(game, 0);
+
+    expect(game.players[0]!.declaredTing).toBe(true);
+    expect(tileKey(game.players[0]!.discards.at(-1)!)).toBe("characters:1");
+    expect(game.currentSeat).toBe(1);
+  });
+
   it("does not offer Taiwan ting declaration when the forced discard would break tenpai", () => {
     const game = createGame(seats(), { random: () => 0.42 });
     const hand = tiles([
@@ -775,7 +808,7 @@ describe("engine", () => {
     expect(privateState.legalActions.some((action) => action.type === "declareTing")).toBe(false);
   });
 
-  it("auto-discards a drawn tile after Taiwan ting when self draw is not available", () => {
+  it("auto-discards a drawn tile when declaring Taiwan ting", () => {
     const game = createGame(seats(), { random: () => 0.42 });
     const drawnTile = tile("bamboo:9", 0);
     game.currentSeat = 0;
@@ -828,7 +861,6 @@ describe("engine", () => {
 
     applyDeclareTing(game, 0);
 
-    expect(autoTingDiscardIfNeeded(game, 0)).toBe(true);
     expect(game.players[0]!.discards.at(-1)?.id).toBe(drawnTile.id);
     expect(game.currentSeat).toBe(1);
   });

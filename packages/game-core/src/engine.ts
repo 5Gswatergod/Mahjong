@@ -484,7 +484,8 @@ export function applyDeclareTing(game: CoreGame, seatIndex: number): void {
   if (player.declaredTing) {
     return;
   }
-  if (!canDeclareTing(player)) {
+  const discardTile = chooseBestTingDeclarationDiscard(game, player);
+  if (!discardTile) {
     throw new Error("目前尚未聽牌，不能宣告聽牌。");
   }
   player.declaredTing = true;
@@ -497,7 +498,7 @@ export function applyDeclareTing(game: CoreGame, seatIndex: number): void {
       player.declaredEarthTing = true;
     }
   }
-  touch(game);
+  applyDiscard(game, seatIndex, discardTile.id);
 }
 
 export function applyDeclareRiichi(game: CoreGame, seatIndex: number): void {
@@ -1063,9 +1064,78 @@ function canDeclareTingAfterLegalDiscard(player: CorePlayer): boolean {
   if (!canDeclareTing(player)) {
     return false;
   }
+  return tingDeclarationDiscardCandidates(player).length > 0;
+}
+
+function chooseBestTingDeclarationDiscard(game: CoreGame, player: CorePlayer): Tile | undefined {
+  const visibleCounts = visibleTileCountsForPlayer(game, player);
+  let best:
+    | {
+        tile: Tile;
+        liveWaitCount: number;
+        waitKindCount: number;
+      }
+    | undefined;
+
+  for (const tile of tingDeclarationDiscardCandidates(player)) {
+    const remaining = removeOneTileById(player.hand, tile.id);
+    const winningTiles = getWinningTilesForHand(game, remaining, player.melds);
+    const waitKeys = new Set(winningTiles.map(tileKey));
+    const liveWaitCount = [...waitKeys].reduce((total, key) => total + Math.max(0, 4 - (visibleCounts.get(key) ?? 0)), 0);
+    const candidate = { tile, liveWaitCount, waitKindCount: waitKeys.size };
+    if (
+      !best ||
+      candidate.liveWaitCount > best.liveWaitCount ||
+      (candidate.liveWaitCount === best.liveWaitCount && candidate.waitKindCount > best.waitKindCount)
+    ) {
+      best = candidate;
+    }
+  }
+
+  return best?.tile;
+}
+
+function tingDeclarationDiscardCandidates(player: CorePlayer): Tile[] {
   const rawDrawnId = player.drawnTileId?.replace("supplement:", "");
   const discardableAfterDeclaration = rawDrawnId ? player.hand.filter((tile) => tile.id === rawDrawnId) : sortTiles(player.hand);
-  return discardableAfterDeclaration.some((tile) => isTing(removeOneTileById(player.hand, tile.id), player.melds));
+  return discardableAfterDeclaration.filter((tile) => isTing(removeOneTileById(player.hand, tile.id), player.melds));
+}
+
+function visibleTileCountsForPlayer(game: CoreGame, player: CorePlayer): Map<string, number> {
+  const counts = new Map<string, number>();
+  const seenTileIds = new Set<string>();
+  const addTile = (tile: Tile): void => {
+    if (tile.kind === "flower" || seenTileIds.has(tile.id)) {
+      return;
+    }
+    seenTileIds.add(tile.id);
+    const key = tileKey(tile);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  };
+
+  for (const tile of player.hand) {
+    addTile(tile);
+  }
+
+  for (const publicPlayer of game.players) {
+    for (const tile of publicPlayer.discards) {
+      addTile(tile);
+    }
+    for (const meld of publicPlayer.melds) {
+      if (meld.concealed && publicPlayer.seatIndex !== player.seatIndex) {
+        continue;
+      }
+      for (const tile of meld.tiles) {
+        addTile(tile);
+      }
+    }
+  }
+
+  if (game.lastDiscard) {
+    addTile(game.lastDiscard.tile);
+  }
+
+  return counts;
 }
 
 function canDeclareRiichi(player: CorePlayer): boolean {
