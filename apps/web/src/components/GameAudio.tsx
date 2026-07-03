@@ -3,6 +3,7 @@ import { Volume1, Volume2, VolumeX, X } from "lucide-react";
 import type { MusicTrack } from "../musicAssets";
 
 const musicVolumeStorageKey = "taiwanMahjong.musicVolume";
+const musicFadeMs = 850;
 
 export function readStoredMusicVolume(): number {
   if (typeof window === "undefined") {
@@ -75,16 +76,25 @@ export function AudioSettings({
 
 export function MusicDirector({ track, volume }: { track: MusicTrack | null; volume: number }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const fadeFrameRef = useRef<number | undefined>();
+  const fadeTokenRef = useRef(0);
+  const fadeActiveRef = useRef(false);
+  const targetVolumeRef = useRef(0.55);
   const unlockedRef = useRef(false);
   const safeVolume = useMemo(() => clampVolume(volume), [volume]);
 
   useEffect(() => {
+    targetVolumeRef.current = safeVolume;
     window.localStorage.setItem(musicVolumeStorageKey, String(safeVolume));
   }, [safeVolume]);
 
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
+
+    if (fadeActiveRef.current) {
+      return;
+    }
 
     audio.volume = safeVolume;
     if (safeVolume <= 0) {
@@ -98,30 +108,36 @@ export function MusicDirector({ track, volume }: { track: MusicTrack | null; vol
   }, [safeVolume]);
 
   useEffect(() => {
-    audioRef.current?.pause();
-    audioRef.current = null;
+    const previousAudio = audioRef.current;
+    const fadeToken = fadeTokenRef.current + 1;
+    fadeTokenRef.current = fadeToken;
+    stopFade();
 
     if (!track) {
+      audioRef.current = null;
+      fadeOutAndDispose(previousAudio, fadeToken);
       return;
     }
 
-    const audio = new Audio(track.path);
-    audio.loop = track.loop;
-    audio.preload = "auto";
-    audio.volume = safeVolume;
-    audioRef.current = audio;
-
-    if (unlockedRef.current && safeVolume > 0) {
-      void audio.play().catch(() => undefined);
+    if (previousAudio?.src.endsWith(track.path)) {
+      return;
     }
 
-    return () => {
-      audio.pause();
-      audio.src = "";
-      if (audioRef.current === audio) {
-        audioRef.current = null;
-      }
-    };
+    const nextAudio = new Audio(track.path);
+    nextAudio.loop = track.loop;
+    nextAudio.preload = "auto";
+    nextAudio.volume = unlockedRef.current ? 0 : targetVolumeRef.current;
+    audioRef.current = nextAudio;
+
+    if (!unlockedRef.current) {
+      disposeAudio(previousAudio);
+      return;
+    }
+
+    if (targetVolumeRef.current > 0) {
+      void nextAudio.play().catch(() => undefined);
+    }
+    crossfade(previousAudio, nextAudio, fadeToken);
   }, [track]);
 
   useEffect(() => {
@@ -147,7 +163,102 @@ export function MusicDirector({ track, volume }: { track: MusicTrack | null; vol
     };
   }, [safeVolume]);
 
+  useEffect(() => {
+    return () => {
+      stopFade();
+      disposeAudio(audioRef.current);
+      audioRef.current = null;
+    };
+  }, []);
+
+  function crossfade(previousAudio: HTMLAudioElement | null, nextAudio: HTMLAudioElement, token: number): void {
+    if (!previousAudio) {
+      nextAudio.volume = targetVolumeRef.current;
+      return;
+    }
+
+    fadeActiveRef.current = true;
+    const startedAt = performance.now();
+
+    const step = (now: number) => {
+      if (fadeTokenRef.current !== token) {
+        return;
+      }
+
+      const progress = Math.min(1, (now - startedAt) / musicFadeMs);
+      const targetVolume = targetVolumeRef.current;
+      previousAudio.volume = targetVolume * (1 - progress);
+      nextAudio.volume = targetVolume * progress;
+
+      if (progress < 1) {
+        fadeFrameRef.current = window.requestAnimationFrame(step);
+        return;
+      }
+
+      fadeActiveRef.current = false;
+      fadeFrameRef.current = undefined;
+      disposeAudio(previousAudio);
+      nextAudio.volume = targetVolume;
+      if (targetVolume <= 0) {
+        nextAudio.pause();
+      }
+    };
+
+    fadeFrameRef.current = window.requestAnimationFrame(step);
+  }
+
+  function fadeOutAndDispose(audio: HTMLAudioElement | null, token: number): void {
+    if (!audio) {
+      return;
+    }
+
+    if (!unlockedRef.current) {
+      disposeAudio(audio);
+      return;
+    }
+
+    fadeActiveRef.current = true;
+    const startedAt = performance.now();
+    const startingVolume = audio.volume;
+
+    const step = (now: number) => {
+      if (fadeTokenRef.current !== token) {
+        return;
+      }
+
+      const progress = Math.min(1, (now - startedAt) / musicFadeMs);
+      audio.volume = startingVolume * (1 - progress);
+
+      if (progress < 1) {
+        fadeFrameRef.current = window.requestAnimationFrame(step);
+        return;
+      }
+
+      fadeActiveRef.current = false;
+      fadeFrameRef.current = undefined;
+      disposeAudio(audio);
+    };
+
+    fadeFrameRef.current = window.requestAnimationFrame(step);
+  }
+
+  function stopFade(): void {
+    if (fadeFrameRef.current !== undefined) {
+      window.cancelAnimationFrame(fadeFrameRef.current);
+      fadeFrameRef.current = undefined;
+    }
+    fadeActiveRef.current = false;
+  }
+
   return null;
+}
+
+function disposeAudio(audio: HTMLAudioElement | null): void {
+  if (!audio) {
+    return;
+  }
+  audio.pause();
+  audio.src = "";
 }
 
 function clampVolume(value: number): number {

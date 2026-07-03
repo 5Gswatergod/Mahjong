@@ -80,7 +80,6 @@ export function App() {
   const showSettlement = Boolean(settlementResult && dismissedSettlementHandId !== settlementResult.handId);
   const serverNow = clockMs + clockOffsetMs;
   const activeGame = Boolean(game && game.phase !== "waiting" && game.phase !== "settled" && game.phase !== "draw");
-  const currentPlayer = game?.players.find((player) => player.seatIndex === game.currentSeat);
   const selfPlayer = mySeat ? game?.players.find((player) => player.seatIndex === mySeat.seatIndex) : undefined;
   const showHandTingHint = Boolean(selfPlayer?.declaredTing || selfPlayer?.declaredRiichi);
   const hasTingPlayer = Boolean(game?.players.some((player) => player.declaredTing || player.declaredRiichi));
@@ -120,7 +119,7 @@ export function App() {
     }
 
     if (activeGame) {
-      if (game?.phase === "claiming" || hasTingPlayer || currentPlayer?.declaredTing || currentPlayer?.declaredRiichi) {
+      if (hasTingPlayer) {
         return tenpaiTrack;
       }
       return tableTrack;
@@ -131,7 +130,7 @@ export function App() {
     }
 
     return mainMenuTrack;
-  }, [activeGame, currentPlayer?.declaredRiichi, currentPlayer?.declaredTing, game?.phase, hasTingPlayer, room, settlementResult, showSettlement]);
+  }, [activeGame, game?.handId, hasTingPlayer, room, settlementResult, showSettlement]);
 
   useEffect(() => {
     setSelectedTileId(null);

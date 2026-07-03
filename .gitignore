@@ -12,3 +12,6 @@ npm-debug.log*
 *.key
 *.key.pub
 deploy_known_hosts
+AGENTS.md
+.codex
+.agents
