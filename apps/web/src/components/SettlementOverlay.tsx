@@ -2,7 +2,7 @@ import { Check, X } from "lucide-react";
 import type { GameState, PrivatePlayerState, ScoringResult } from "@taiwan-mahjong/shared";
 import { windFullLabels, windLabels } from "../constants";
 import { formatPoints, formatSeatList, initials, scoreDeltaForSeat, settlementLevel, winModeLabel } from "../utils/labels";
-import { MeldTiles, TileButton } from "./Tiles";
+import { MeldTiles, MiniTile, TileButton } from "./Tiles";
 
 export function SettlementOverlay({
   result,
@@ -22,14 +22,18 @@ export function SettlementOverlay({
   const isDraw = result.winMode === "draw";
   const winner = typeof result.winnerSeat === "number" ? game?.players.find((player) => player.seatIndex === result.winnerSeat) : undefined;
   const isWinnerPerspective = !isDraw && privateState !== null && result.winnerSeat === privateState.seatIndex;
-  const winnerIsDealer = game?.mode === "taiwan" && !isDraw && typeof result.winnerSeat === "number" && result.winnerSeat === game.dealerSeat;
-  const displayTai = result.baseTai + (winnerIsDealer ? 1 : 0);
-  const displayPatterns = winnerIsDealer
-    ? [...result.patterns, { id: "dealer-bonus", name: "莊家", tai: 1 }]
-    : result.patterns;
+  const unitLabel = game?.mode === "riichi" ? "番" : "台";
+  const displayTai = displaySettlementTai(result);
+  const displayPatterns = result.patterns;
   const displayTiles = result.winnerHand ?? (isWinnerPerspective ? privateState.hand : []);
   const displayMelds = result.winnerMelds ?? [];
-  const scoreRows = game?.players.map((player) => ({ player, delta: scoreDeltaForSeat(result, player.seatIndex) })) ?? [];
+  const scoreRows =
+    game?.players.map((player) => ({
+      player,
+      delta: scoreDeltaForSeat(result, player.seatIndex),
+      taiSummary: seatTaiSummary(result, player.seatIndex, unitLabel)
+    })) ?? [];
+  const sourceSummary = buildWinSourceSummary(result, game);
 
   return (
     <div className="settlementBackdrop" role="dialog" aria-modal="true" aria-label="結算">
@@ -40,6 +44,7 @@ export function SettlementOverlay({
             <span className="winnerLabel">{isDraw ? "荒牌流局" : winModeLabel(result.winMode)}</span>
             <h2>{isDraw ? result.drawReason ?? "流局" : winner?.name ?? `玩家 ${(result.winnerSeat ?? 0) + 1}`}</h2>
             <p>{isDraw ? "本局沒有玩家胡牌" : `${windFullLabels[winner?.wind ?? "east"]} · ${settlementLevel(displayTai)}`}</p>
+            {!isDraw && sourceSummary ? <p className="winnerSourceSummary">{sourceSummary}</p> : null}
           </div>
         </div>
 
@@ -65,10 +70,18 @@ export function SettlementOverlay({
             )}
           </div>
 
+          {!isDraw && result.winningTile ? (
+            <div className="winningTileSummary">
+              <span>胡牌</span>
+              <MiniTile tile={result.winningTile} />
+              <strong>{sourceSummary}</strong>
+            </div>
+          ) : null}
+
           <div className="settlementStats">
             <div className="fanDial">
               <strong>{displayTai}</strong>
-              <span>{game?.mode === "riichi" ? "番" : "台"}</span>
+              <span>{unitLabel}</span>
             </div>
             <div className="patternList">
               {displayPatterns.length === 0 ? (
@@ -77,7 +90,7 @@ export function SettlementOverlay({
                 displayPatterns.map((pattern) => (
                   <span className="patternPill" key={pattern.id}>
                     {pattern.name}
-                    {pattern.tai > 0 ? ` ${pattern.tai}${game?.mode === "riichi" ? "番" : "台"}` : ""}
+                    {pattern.tai > 0 ? ` ${pattern.tai}${unitLabel}` : ""}
                   </span>
                 ))
               )}
@@ -85,10 +98,22 @@ export function SettlementOverlay({
           </div>
 
           <div className="scoreboardRows">
-            {scoreRows.map(({ player, delta }) => (
+            {scoreRows.map(({ player, delta, taiSummary }) => (
               <div className={delta > 0 ? "scoreRow positive" : delta < 0 ? "scoreRow negative" : "scoreRow"} key={player.seatIndex}>
-                <span>{windLabels[player.wind]}</span>
-                <strong>{player.name ?? `玩家 ${player.seatIndex + 1}`}</strong>
+                <span className="scoreWind">{windLabels[player.wind]}</span>
+                <div className="scorePlayerCell">
+                  <strong>
+                    <span className="scorePlayerName">{player.name ?? `玩家 ${player.seatIndex + 1}`}</span>
+                    {taiSummary.primary ? <span className={taiSummary.primary.startsWith("-") ? "scoreTaiBadge negative" : "scoreTaiBadge positive"}>{taiSummary.primary}</span> : null}
+                  </strong>
+                  {taiSummary.adjustments.length > 0 ? (
+                    <div className="scoreTaiAdjustments">
+                      {taiSummary.adjustments.map((adjustment) => (
+                        <span key={adjustment}>{adjustment}</span>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
                 <em>{delta === 0 ? "±0" : delta > 0 ? `+${formatPoints(delta)}` : `-${formatPoints(Math.abs(delta))}`}</em>
               </div>
             ))}
@@ -112,4 +137,70 @@ export function SettlementOverlay({
       </section>
     </div>
   );
+}
+
+function displaySettlementTai(result: ScoringResult): number {
+  if (result.payments.length === 0) {
+    return result.baseTai;
+  }
+  return Math.max(result.baseTai, ...result.payments.map((payment) => payment.tai));
+}
+
+function seatTaiSummary(result: ScoringResult, seatIndex: number, unitLabel: string): { primary: string; adjustments: string[] } {
+  const paidPayments = result.payments.filter((payment) => payment.fromSeat === seatIndex);
+  const receivedPayments = result.payments.filter((payment) => payment.toSeat === seatIndex);
+
+  if (paidPayments.length > 0) {
+    return {
+      primary: formatTaiBadge("-", paidPayments, unitLabel),
+      adjustments: uniqueAdjustmentLabels(paidPayments, unitLabel)
+    };
+  }
+
+  if (receivedPayments.length > 0) {
+    return {
+      primary: formatTaiBadge("+", receivedPayments, unitLabel),
+      adjustments: uniqueAdjustmentLabels(receivedPayments, unitLabel)
+    };
+  }
+
+  return { primary: "", adjustments: [] };
+}
+
+function formatTaiBadge(sign: "+" | "-", payments: ScoringResult["payments"], unitLabel: string): string {
+  const taiValues = [...new Set(payments.map((payment) => payment.tai))].sort((left, right) => left - right);
+  if (taiValues.length === 0 || taiValues.every((tai) => tai === 0)) {
+    return "";
+  }
+  return `${sign}${taiValues.join("/")}${unitLabel}`;
+}
+
+function uniqueAdjustmentLabels(payments: ScoringResult["payments"], unitLabel: string): string[] {
+  const labels = new Set<string>();
+  for (const payment of payments) {
+    for (const adjustment of payment.taiAdjustments ?? []) {
+      labels.add(`${adjustment.label} +${adjustment.tai}${unitLabel}`);
+    }
+  }
+  return [...labels];
+}
+
+function buildWinSourceSummary(result: ScoringResult, game: GameState | null): string {
+  if (result.winMode === "draw") {
+    return "";
+  }
+
+  if (result.winMode === "selfDraw" || result.winMode === "eightFlowers") {
+    return result.winningTile ? `自摸 ${result.winningTile.label}` : "自摸";
+  }
+
+  if (result.winMode === "sevenFlowersRob") {
+    return result.winningTile ? `七搶一 ${result.winningTile.label}` : "七搶一";
+  }
+
+  const fromPlayer = typeof result.fromSeat === "number" ? game?.players.find((player) => player.seatIndex === result.fromSeat) : undefined;
+  const fromName = fromPlayer?.name ?? (typeof result.fromSeat === "number" ? `玩家 ${result.fromSeat + 1}` : "對手");
+  const fromLabel = fromPlayer ? `${windLabels[fromPlayer.wind]}家 ${fromName}` : fromName;
+  const actionLabel = result.winMode === "robKong" ? "搶槓" : "榮和";
+  return result.winningTile ? `${actionLabel} ${result.winningTile.label}，${fromLabel} 放銃` : `${actionLabel}，${fromLabel} 放銃`;
 }

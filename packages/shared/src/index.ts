@@ -113,12 +113,21 @@ export interface PaymentResult {
   amount: number;
   tai: number;
   reason: string;
+  taiAdjustments?: PaymentTaiAdjustment[];
+}
+
+export interface PaymentTaiAdjustment {
+  label: string;
+  tai: number;
 }
 
 export interface ScoringResult {
   handId: string;
   winnerSeat?: number;
   winMode: SettlementMode;
+  winningTile?: Tile;
+  fromSeat?: number;
+  responsibilitySeat?: number;
   drawReason?: string;
   tenpaiSeats?: number[];
   notenSeats?: number[];

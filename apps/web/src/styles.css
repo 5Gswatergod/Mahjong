@@ -2295,9 +2295,13 @@ input {
   min-height: 84px;
   padding: 4px 48px 4px 4px;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  align-content: flex-start;
   gap: 5px;
-  overflow-x: auto;
+  max-height: 154px;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .settlementTiles span {
@@ -2313,6 +2317,30 @@ input {
 
 .settlementTiles .tileButton:disabled {
   opacity: 1;
+}
+
+.winnerSourceSummary {
+  color: #fff7df;
+  font-weight: 800;
+}
+
+.winningTileSummary {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #fff7df;
+}
+
+.winningTileSummary span {
+  color: #f4d887;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.winningTileSummary strong {
+  font-size: 14px;
 }
 
 .settlementMeld {
@@ -2392,7 +2420,7 @@ input {
   border-radius: 8px;
 }
 
-.scoreRow span {
+.scoreWind {
   width: 28px;
   height: 28px;
   display: inline-grid;
@@ -2403,11 +2431,60 @@ input {
   font-weight: 900;
 }
 
-.scoreRow strong {
+.scorePlayerCell {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.scorePlayerCell strong {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.scorePlayerName {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.scoreTaiBadge {
+  flex: none;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 1000;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.scoreTaiBadge.positive {
+  color: #72efbc;
+}
+
+.scoreTaiBadge.negative {
+  color: #ffb0a8;
+}
+
+.scoreTaiAdjustments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.scoreTaiAdjustments span {
+  width: auto;
+  height: auto;
+  padding: 2px 6px;
+  display: inline-flex;
+  color: #f4d887;
+  background: rgba(244, 216, 135, 0.12);
+  border: 1px solid rgba(244, 216, 135, 0.18);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 900;
 }
 
 .scoreRow em {

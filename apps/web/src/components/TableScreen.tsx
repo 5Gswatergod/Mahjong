@@ -253,7 +253,7 @@ function TurnCountdown({ game, serverNow, latencyMs }: { game: GameState; server
       </div>
       <div className="timerMeta">
         <strong>{game.phase === "claiming" ? "回應倒數" : "出牌倒數"}</strong>
-        <span>{formatLatency(latencyMs)}</span>
+        <span>延遲 {formatLatency(latencyMs)}</span>
       </div>
     </div>
   );

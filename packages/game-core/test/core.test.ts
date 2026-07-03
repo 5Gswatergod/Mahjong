@@ -187,6 +187,52 @@ describe("scoring", () => {
     expect(result.patterns.map((pattern) => pattern.id)).toContain("half-flush");
     expect(result.patterns.map((pattern) => pattern.id)).not.toContain("all-honors");
     expect(result.payments[0]?.tai).toBeGreaterThan(result.baseTai);
+    expect(result.winningTile).toBe(hand.at(-1));
+    expect(result.fromSeat).toBe(1);
+    expect(result.responsibilitySeat).toBe(1);
+    expect(result.payments[0]?.taiAdjustments).toEqual([
+      { label: "莊家胡", tai: 1 },
+      { label: "連1拉1", tai: 2 }
+    ]);
+  });
+
+  it("labels dealer payment tai when winning from the dealer", () => {
+    const hand = tiles([
+      "characters:1",
+      "characters:2",
+      "characters:3",
+      "characters:4",
+      "characters:5",
+      "characters:6",
+      "characters:7",
+      "characters:8",
+      "characters:9",
+      "dots:2",
+      "dots:3",
+      "dots:4",
+      "dragon:red",
+      "dragon:red",
+      "dragon:red",
+      "wind:east",
+      "wind:east"
+    ]);
+
+    const result = calculateScore(
+      [
+        { seatIndex: 0, wind: "east", hand, flowers: [], melds: [], declaredTing: false, declaredEarthTing: false },
+        { seatIndex: 1, wind: "south", hand: [], flowers: [], melds: [], declaredTing: false, declaredEarthTing: false },
+        { seatIndex: 2, wind: "west", hand: [], flowers: [], melds: [], declaredTing: false, declaredEarthTing: false },
+        { seatIndex: 3, wind: "north", hand: [], flowers: [], melds: [], declaredTing: false, declaredEarthTing: false }
+      ],
+      { handId: "dealer-payment", dealerSeat: 1, roundWind: "east", dealerStreak: 2 },
+      { winnerSeat: 0, winMode: "discard", winningTile: hand.at(-1)!, fromSeat: 1, responsibilitySeat: 1 }
+    );
+
+    expect(result.payments[0]?.tai).toBe(result.baseTai + 5);
+    expect(result.payments[0]?.taiAdjustments).toEqual([
+      { label: "胡莊家", tai: 1 },
+      { label: "連2拉2", tai: 4 }
+    ]);
   });
 
   it("uses GameTower Taiwan tai values for major hands", () => {

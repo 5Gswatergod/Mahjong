@@ -187,10 +187,10 @@ export function MusicDirector({ track, volume }: { track: MusicTrack | null; vol
         return;
       }
 
-      const progress = Math.min(1, (now - startedAt) / musicFadeMs);
+      const progress = clampUnit((now - startedAt) / musicFadeMs);
       const targetVolume = targetVolumeRef.current;
-      previousAudio.volume = targetVolume * (1 - progress);
-      nextAudio.volume = targetVolume * progress;
+      previousAudio.volume = clampVolume(targetVolume * (1 - progress));
+      nextAudio.volume = clampVolume(targetVolume * progress);
 
       if (progress < 1) {
         fadeFrameRef.current = window.requestAnimationFrame(step);
@@ -201,7 +201,7 @@ export function MusicDirector({ track, volume }: { track: MusicTrack | null; vol
       fadeFrameRef.current = undefined;
       fadingAudiosRef.current.delete(previousAudio);
       disposeAudio(previousAudio);
-      nextAudio.volume = targetVolume;
+      nextAudio.volume = clampVolume(targetVolume);
       if (targetVolume <= 0) {
         nextAudio.pause();
       }
@@ -230,8 +230,8 @@ export function MusicDirector({ track, volume }: { track: MusicTrack | null; vol
         return;
       }
 
-      const progress = Math.min(1, (now - startedAt) / musicFadeMs);
-      audio.volume = startingVolume * (1 - progress);
+      const progress = clampUnit((now - startedAt) / musicFadeMs);
+      audio.volume = clampVolume(startingVolume * (1 - progress));
 
       if (progress < 1) {
         fadeFrameRef.current = window.requestAnimationFrame(step);
@@ -271,6 +271,13 @@ function disposeAudio(audio: HTMLAudioElement | null): void {
 function clampVolume(value: number): number {
   if (!Number.isFinite(value)) {
     return 0.55;
+  }
+  return Math.min(1, Math.max(0, value));
+}
+
+function clampUnit(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
   }
   return Math.min(1, Math.max(0, value));
 }

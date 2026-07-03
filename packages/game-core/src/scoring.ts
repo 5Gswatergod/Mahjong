@@ -2,6 +2,7 @@ import type {
   GameConfig,
   Meld,
   PatternScore,
+  PaymentTaiAdjustment,
   ScoringResult,
   Tile,
   Wind,
@@ -65,6 +66,9 @@ export function calculateScore(players: ScoringPlayer[], table: ScoringTable, co
     handId: table.handId,
     winnerSeat: context.winnerSeat,
     winMode: context.winMode,
+    ...(context.winningTile ? { winningTile: context.winningTile } : {}),
+    ...(typeof context.fromSeat === "number" ? { fromSeat: context.fromSeat } : {}),
+    ...(typeof context.responsibilitySeat === "number" ? { responsibilitySeat: context.responsibilitySeat } : {}),
     baseTai: evaluated.tai,
     patterns: evaluated.patterns,
     payments,
@@ -293,25 +297,36 @@ function buildPayments(
       toSeat: winnerSeat,
       amount,
       tai,
-      reason: adjustments.reason ? `胡牌 ${adjustments.reason}` : "胡牌"
+      reason: adjustments.reason ? `胡牌 ${adjustments.reason}` : "胡牌",
+      ...(adjustments.taiAdjustments.length > 0 ? { taiAdjustments: adjustments.taiAdjustments } : {})
     };
   });
 }
 
-function paymentTaiAdjustments(winnerSeat: number, payerSeat: number, table: ScoringTable): { tai: number; reason: string } {
+function paymentTaiAdjustments(
+  winnerSeat: number,
+  payerSeat: number,
+  table: ScoringTable
+): { tai: number; reason: string; taiAdjustments: PaymentTaiAdjustment[] } {
   const reasons: string[] = [];
+  const taiAdjustments: PaymentTaiAdjustment[] = [];
   let tai = 0;
   const dealerInvolved = winnerSeat === table.dealerSeat || payerSeat === table.dealerSeat;
   if (dealerInvolved) {
-    tai += 1;
-    reasons.push("莊家+1");
+    const label = winnerSeat === table.dealerSeat ? "莊家胡" : "胡莊家";
+    const adjustmentTai = 1;
+    tai += adjustmentTai;
+    reasons.push(`${label}+${adjustmentTai}`);
+    taiAdjustments.push({ label, tai: adjustmentTai });
   }
   if (dealerInvolved && table.dealerStreak > 0) {
     const streakTai = table.dealerStreak * 2;
+    const label = `連${table.dealerStreak}拉${table.dealerStreak}`;
     tai += streakTai;
-    reasons.push(`連${table.dealerStreak}拉${table.dealerStreak}+${streakTai}`);
+    reasons.push(`${label}+${streakTai}`);
+    taiAdjustments.push({ label, tai: streakTai });
   }
-  return { tai, reason: reasons.join(" ") };
+  return { tai, reason: reasons.join(" "), taiAdjustments };
 }
 
 function detectWaitPattern(
