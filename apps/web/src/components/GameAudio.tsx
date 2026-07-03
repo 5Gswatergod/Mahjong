@@ -79,6 +79,7 @@ export function MusicDirector({ track, volume }: { track: MusicTrack | null; vol
   const fadeFrameRef = useRef<number | undefined>();
   const fadeTokenRef = useRef(0);
   const fadeActiveRef = useRef(false);
+  const fadingAudiosRef = useRef(new Set<HTMLAudioElement>());
   const targetVolumeRef = useRef(0.55);
   const unlockedRef = useRef(false);
   const safeVolume = useMemo(() => clampVolume(volume), [volume]);
@@ -177,6 +178,7 @@ export function MusicDirector({ track, volume }: { track: MusicTrack | null; vol
       return;
     }
 
+    fadingAudiosRef.current.add(previousAudio);
     fadeActiveRef.current = true;
     const startedAt = performance.now();
 
@@ -197,6 +199,7 @@ export function MusicDirector({ track, volume }: { track: MusicTrack | null; vol
 
       fadeActiveRef.current = false;
       fadeFrameRef.current = undefined;
+      fadingAudiosRef.current.delete(previousAudio);
       disposeAudio(previousAudio);
       nextAudio.volume = targetVolume;
       if (targetVolume <= 0) {
@@ -217,6 +220,7 @@ export function MusicDirector({ track, volume }: { track: MusicTrack | null; vol
       return;
     }
 
+    fadingAudiosRef.current.add(audio);
     fadeActiveRef.current = true;
     const startedAt = performance.now();
     const startingVolume = audio.volume;
@@ -236,6 +240,7 @@ export function MusicDirector({ track, volume }: { track: MusicTrack | null; vol
 
       fadeActiveRef.current = false;
       fadeFrameRef.current = undefined;
+      fadingAudiosRef.current.delete(audio);
       disposeAudio(audio);
     };
 
@@ -247,6 +252,8 @@ export function MusicDirector({ track, volume }: { track: MusicTrack | null; vol
       window.cancelAnimationFrame(fadeFrameRef.current);
       fadeFrameRef.current = undefined;
     }
+    fadingAudiosRef.current.forEach((audio) => disposeAudio(audio));
+    fadingAudiosRef.current.clear();
     fadeActiveRef.current = false;
   }
 
