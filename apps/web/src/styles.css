@@ -694,9 +694,134 @@ input {
 }
 
 .lobbyTableArea {
+  position: relative;
   display: grid;
   grid-template-rows: minmax(430px, 1fr) auto;
   gap: 10px;
+}
+
+.seatDrawCeremony {
+  position: absolute;
+  left: 50%;
+  top: 48%;
+  z-index: 4;
+  width: min(620px, calc(100% - 32px));
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+  color: #fff7df;
+  background: rgba(8, 13, 24, 0.82);
+  border: 1px solid rgba(244, 216, 135, 0.32);
+  border-radius: 8px;
+  box-shadow: 0 22px 62px rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(16px);
+  transform: translate(-50%, -50%);
+}
+
+.seatDrawHeader {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.seatDrawHeader strong {
+  font-size: 16px;
+}
+
+.seatDrawHeader span {
+  margin-left: auto;
+  color: #f4d887;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.seatDrawCards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.seatDrawCard {
+  min-width: 0;
+  min-height: 164px;
+  padding: 8px;
+  display: grid;
+  grid-template-rows: auto 74px auto auto;
+  justify-items: center;
+  gap: 6px;
+  color: #d6d7df;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 8px;
+}
+
+.seatDrawCard.revealed {
+  color: #fff7df;
+  border-color: rgba(245, 202, 96, 0.48);
+  background: rgba(245, 202, 96, 0.12);
+}
+
+.seatDrawOrder {
+  width: 24px;
+  height: 24px;
+  display: inline-grid;
+  place-items: center;
+  color: #132822;
+  background: #f4d887;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.seatDrawTile {
+  width: 50px;
+  height: 70px;
+  display: inline-grid;
+  place-items: center;
+  color: #153029;
+  background:
+    linear-gradient(135deg, transparent 44%, rgba(255, 255, 255, 0.28) 45%, rgba(255, 255, 255, 0.28) 54%, transparent 55%),
+    linear-gradient(45deg, transparent 44%, rgba(255, 255, 255, 0.2) 45%, rgba(255, 255, 255, 0.2) 54%, transparent 55%),
+    linear-gradient(180deg, #f1b54b, #a95d2b);
+  border: 1px solid #ffe0a3;
+  border-radius: 7px;
+  box-shadow: 0 5px 0 #6f3b20;
+  font-size: 28px;
+  font-weight: 1000;
+}
+
+.seatDrawCard.revealed .seatDrawTile {
+  background: linear-gradient(180deg, #fffdf7, #ede2c8);
+  border-color: #c9b679;
+  box-shadow: 0 5px 0 #b49348;
+}
+
+.seatDrawCard strong,
+.seatDrawCard em {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.seatDrawCard strong {
+  font-size: 13px;
+}
+
+.seatDrawCard em {
+  color: #f4d887;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.seatDrawCeremony p {
+  margin: 0;
+  color: #c5ced8;
+  font-size: 13px;
+  font-weight: 900;
+  text-align: center;
 }
 
 .lobbyReadyBar {
@@ -2814,6 +2939,27 @@ input {
 
   .lobbyTableArea {
     grid-template-rows: minmax(340px, 1fr) auto;
+  }
+
+  .seatDrawCeremony {
+    top: 50%;
+    width: min(520px, calc(100% - 20px));
+    padding: 12px;
+  }
+
+  .seatDrawCards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .seatDrawCard {
+    min-height: 134px;
+    grid-template-rows: auto 58px auto auto;
+  }
+
+  .seatDrawTile {
+    width: 42px;
+    height: 58px;
+    font-size: 22px;
   }
 
   .wallTop {

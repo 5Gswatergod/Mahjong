@@ -33,6 +33,7 @@ import {
   type LegalAction,
   type PlayerSeat,
   type RoomSnapshot,
+  type SeatDrawResult,
   type ServerToClientEvents,
   type SocketData,
   type Tile,
@@ -46,6 +47,7 @@ import {
   type BotVisiblePlayer
 } from "./bot-policy.js";
 import { MemoryEventStore, PgEventStore, type EventStore, resolveDatabaseConnection } from "./event-store.js";
+import { applySeatDrawResult, createSeatDrawResult } from "./seat-draw.js";
 
 declare module "@taiwan-mahjong/shared" {
   interface SocketData {
@@ -69,10 +71,12 @@ interface Room {
   config: GameConfig;
   hostPlayerId: string;
   seats: PlayerSeat[];
+  seatDraw?: SeatDrawResult;
   game?: CoreGame;
   createdAt: number;
   updatedAt: number;
   disconnectTimers: Map<string, NodeJS.Timeout>;
+  seatDrawTimer?: NodeJS.Timeout;
   botTimer?: NodeJS.Timeout;
   autoTingTimer?: NodeJS.Timeout;
 }
@@ -279,6 +283,9 @@ io.on("connection", (socket) => {
   socket.on("room.ready", async ({ ready }) => {
     await handleSocketAction(socket, async () => {
       const currentRoom = requireRoom(socket.data.roomCode);
+      if (currentRoom.seatDraw) {
+        throw new Error("正在抓位，請稍候。");
+      }
       const seat = requireSeat(currentRoom, socket.data.playerId);
       seat.ready = ready;
       currentRoom.updatedAt = Date.now();
@@ -469,6 +476,9 @@ function joinRoom(room: Room, session: GuestSession): PlayerSeat {
   if (existing) {
     return existing;
   }
+  if (room.seatDraw) {
+    throw new Error("抓位中不能加入房間。");
+  }
   const seat = room.seats.find((candidate) => !candidate.playerId);
   if (!seat) {
     throw new Error("Room is full.");
@@ -485,6 +495,9 @@ function joinRoom(room: Room, session: GuestSession): PlayerSeat {
 function addBotToRoom(room: Room, requesterPlayerId: string, seatIndex: number): PlayerSeat {
   if (requesterPlayerId !== room.hostPlayerId) {
     throw new Error("Only the host can add computer players.");
+  }
+  if (room.seatDraw) {
+    throw new Error("抓位中不能補 AI。");
   }
   if (room.game && room.game.phase !== "settled" && room.game.phase !== "draw") {
     throw new Error("Computer players can only be added before a hand starts.");
@@ -509,6 +522,9 @@ function addBotToRoom(room: Room, requesterPlayerId: string, seatIndex: number):
 function clearSeatInRoom(room: Room, requesterPlayerId: string, seatIndex: number): PlayerSeat {
   if (requesterPlayerId !== room.hostPlayerId) {
     throw new Error("只有房主可以換人。");
+  }
+  if (room.seatDraw) {
+    throw new Error("抓位中不能換人。");
   }
   if (room.game && room.game.phase !== "settled" && room.game.phase !== "draw") {
     throw new Error("只能在未開局或局末換人。");
@@ -548,10 +564,52 @@ function maybeStartHand(room: Room): void {
   if (!full || !allReady) {
     return;
   }
+  if (room.seatDraw) {
+    return;
+  }
   if (room.game && room.game.phase !== "settled" && room.game.phase !== "draw") {
     return;
   }
 
+  if (!room.game) {
+    startSeatDraw(room);
+    return;
+  }
+
+  startHand(room);
+}
+
+function startSeatDraw(room: Room): void {
+  const now = Date.now();
+  const draw = createSeatDrawResult(room.seats, { id: `seatdraw_${nanoid(10)}`, now });
+  room.seatDraw = draw;
+  room.updatedAt = now;
+  void persist(room.code, "room.seatDrawStarted", draw);
+
+  room.seatDrawTimer = setTimeout(() => {
+    delete room.seatDrawTimer;
+    finishSeatDraw(room);
+  }, Math.max(0, draw.completeAt - now));
+  room.seatDrawTimer.unref();
+}
+
+function finishSeatDraw(room: Room): void {
+  if (!room.seatDraw || room.game) {
+    return;
+  }
+
+  const draw = room.seatDraw;
+  room.seats = applySeatDrawResult(room.seats, draw);
+  syncSocketSeatIndices(room);
+  delete room.seatDraw;
+  room.updatedAt = Date.now();
+  void persist(room.code, "room.seatDrawCompleted", { id: draw.id, cards: draw.cards });
+  startHand(room);
+  broadcastRoom(room);
+  scheduleBot(room);
+}
+
+function startHand(room: Room): void {
   const previous = room.game;
   const previousWinner = previous?.settlement?.winnerSeat;
   const previousDealer = previous?.dealerSeat ?? 0;
@@ -579,6 +637,18 @@ function maybeStartHand(room: Room): void {
   }
   room.updatedAt = Date.now();
   void persist(room.code, "game.started", { handId: room.game.handId, dealerSeat, dealerStreak, config: room.config });
+}
+
+function syncSocketSeatIndices(room: Room): void {
+  for (const client of io.sockets.sockets.values()) {
+    if (client.data.roomCode !== room.code) {
+      continue;
+    }
+    const seat = room.seats.find((candidate) => candidate.playerId === client.data.playerId);
+    if (seat) {
+      client.data.seatIndex = seat.seatIndex;
+    }
+  }
 }
 
 function afterGameMutation(room: Room): void {
@@ -858,6 +928,7 @@ function snapshotRoom(room: Room): RoomSnapshot {
     serverTime: Date.now(),
     hostPlayerId: room.hostPlayerId,
     seats: room.seats,
+    ...(room.seatDraw ? { seatDraw: room.seatDraw } : {}),
     ...(room.game ? { game: toPublicGameState(room.game) } : {}),
     createdAt: room.createdAt,
     updatedAt: room.updatedAt

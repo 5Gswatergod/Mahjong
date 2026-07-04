@@ -87,6 +87,7 @@ export function App() {
     room &&
       session &&
       room.hostPlayerId === session.playerId &&
+      !room.seatDraw &&
       (!game || game.phase === "settled" || game.phase === "draw" || game.phase === "waiting")
   );
 

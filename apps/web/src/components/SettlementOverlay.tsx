@@ -120,7 +120,7 @@ export function SettlementOverlay({
           </div>
 
           <div className="bigResult">
-            <span>{isDraw ? "NO GAME" : settlementLevel(displayTai)}</span>
+            <span>{formatBigResultLabel(result, game, displayTai)}</span>
             <strong>{formatPoints(Math.max(result.totalGain, 0))} 點</strong>
           </div>
 
@@ -144,6 +144,16 @@ function displaySettlementTai(result: ScoringResult): number {
     return result.baseTai;
   }
   return Math.max(result.baseTai, ...result.payments.map((payment) => payment.tai));
+}
+
+function formatBigResultLabel(result: ScoringResult, game: GameState | null, displayTai: number): string {
+  if (result.winMode === "draw") {
+    return "NO GAME";
+  }
+  if (game?.mode === "taiwan" || !game) {
+    return `${displayTai} 台`;
+  }
+  return settlementLevel(displayTai);
 }
 
 function seatTaiSummary(result: ScoringResult, seatIndex: number, unitLabel: string): { primary: string; adjustments: string[] } {

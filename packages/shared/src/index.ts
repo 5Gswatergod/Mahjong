@@ -56,6 +56,23 @@ export interface PlayerSeat {
   connected: boolean;
 }
 
+export interface SeatDrawCard {
+  drawIndex: number;
+  playerId: string;
+  name: string;
+  isBot?: true;
+  wind: Wind;
+  assignedSeatIndex: number;
+  revealedAt: number;
+}
+
+export interface SeatDrawResult {
+  id: string;
+  startedAt: number;
+  completeAt: number;
+  cards: SeatDrawCard[];
+}
+
 export interface GameConfig {
   basePoints: number;
   pointPerTai: number;
@@ -243,6 +260,7 @@ export interface RoomSnapshot {
   serverTime: number;
   hostPlayerId: string;
   seats: PlayerSeat[];
+  seatDraw?: SeatDrawResult;
   game?: GameState;
   createdAt: number;
   updatedAt: number;
