@@ -1,32 +1,72 @@
 import {
   allPlayableTileKeys,
+  calculateScore,
   createTileFromKey,
   keyRank,
   keySuit,
   tileKey
 } from "@taiwan-mahjong/game-core";
-import type { BotDifficulty, GameMode, LegalAction, Meld, PrivatePlayerState, Tile, Wind } from "@taiwan-mahjong/shared";
+import type { BotDifficulty, GameConfig, GameMode, LegalAction, Meld, PrivatePlayerState, Tile, Wind } from "@taiwan-mahjong/shared";
+
+export interface BotVisiblePlayer {
+  seatIndex: number;
+  discards: Tile[];
+  melds: Meld[];
+  declaredTing: boolean;
+  declaredRiichi?: boolean;
+}
 
 export interface BotDecisionContext {
   mode?: GameMode;
   difficulty?: BotDifficulty;
+  seatIndex?: number;
+  dealerSeat?: number;
   seatWind?: Wind;
   roundWind?: Wind;
+  dealerStreak?: number;
+  handId?: string;
+  config?: Partial<GameConfig>;
   melds?: Meld[];
+  flowers?: Tile[];
+  declaredTing?: boolean;
+  declaredHeavenTing?: boolean;
+  declaredEarthTing?: boolean;
+  isAfterKong?: boolean;
+  isLastTile?: boolean;
+  isInitialWin?: boolean;
+  isFirstDrawWin?: boolean;
+  visiblePlayers?: BotVisiblePlayer[];
   visibleTileCounts?: Record<string, number>;
   wallCount?: number;
   claimDiscard?: Tile;
+  claimFromSeat?: number;
 }
 
 interface NormalizedBotContext {
   mode: GameMode;
   difficulty: BotDifficulty;
+  seatIndex: number;
+  dealerSeat: number;
   meldCount: number;
+  melds: Meld[];
+  handId: string;
+  config?: Partial<GameConfig>;
   visibleTileCounts: Record<string, number>;
   wallCount: number;
+  dealerStreak: number;
+  flowers: Tile[];
+  declaredTing: boolean;
+  declaredHeavenTing: boolean;
+  declaredEarthTing: boolean;
+  isAfterKong: boolean;
+  isLastTile: boolean;
+  isInitialWin: boolean;
+  isFirstDrawWin: boolean;
+  opponents: BotVisiblePlayer[];
   seatWind?: Wind;
   roundWind?: Wind;
   claimDiscard?: Tile;
+  claimFromSeat?: number;
 }
 
 interface HandScore {
@@ -34,12 +74,14 @@ interface HandScore {
   effectiveTileTypes: number;
   effectiveTileCount: number;
   shapeScore: number;
+  dreamScore: number;
 }
 
 interface DiscardCandidate {
   action: LegalAction;
   tile: Tile;
   score: HandScore;
+  dangerScore: number;
 }
 
 interface ClaimCandidate {
@@ -47,6 +89,7 @@ interface ClaimCandidate {
   score: HandScore;
   priority: number;
   valuable: boolean;
+  dangerScore: number;
 }
 
 interface ShapeOption {
@@ -58,20 +101,75 @@ const playableKeys = allPlayableTileKeys();
 const playableKeySet = new Set(playableKeys);
 const keyIndices = new Map(playableKeys.map((key, index) => [key, index]));
 
+export function buildVisibleTileCounts({
+  knownTiles,
+  visiblePlayers = [],
+  ownSeatIndex,
+  extraTiles = []
+}: {
+  knownTiles: Tile[];
+  visiblePlayers?: BotVisiblePlayer[];
+  ownSeatIndex?: number;
+  extraTiles?: Tile[];
+}): Record<string, number> {
+  const counts: Record<string, number> = {};
+  const seenTileIds = new Set<string>();
+  const addTile = (tile: Tile): void => {
+    if (tile.kind === "flower" || seenTileIds.has(tile.id)) {
+      return;
+    }
+    seenTileIds.add(tile.id);
+    const key = tileKey(tile);
+    if (!playableKeySet.has(key)) {
+      return;
+    }
+    counts[key] = (counts[key] ?? 0) + 1;
+  };
+
+  for (const tile of knownTiles) {
+    addTile(tile);
+  }
+  for (const player of visiblePlayers) {
+    for (const tile of player.discards) {
+      addTile(tile);
+    }
+    for (const meld of player.melds) {
+      if (meld.concealed && player.seatIndex !== ownSeatIndex) {
+        continue;
+      }
+      for (const tile of meld.tiles) {
+        addTile(tile);
+      }
+    }
+  }
+  for (const tile of extraTiles) {
+    addTile(tile);
+  }
+
+  return counts;
+}
+
 export function chooseBotClaimAction(
   actions: LegalAction[],
   privateState?: PrivatePlayerState,
   context?: BotDecisionContext
 ): LegalAction {
-  const win = actions.find((action) => action.type === "win");
-  if (win) return win;
-
   const pass = actions.find((action) => action.type === "pass");
   if (!privateState) {
+    const win = actions.find((action) => action.type === "win");
+    if (win) return win;
     return pass ?? actions[0]!;
   }
 
-  const normalized = normalizeContext(context, context?.claimDiscard ? [...privateState.hand, context.claimDiscard] : privateState.hand);
+  const normalized = normalizeContext(
+    context,
+    context?.claimDiscard ? [...privateState.hand, context.claimDiscard] : privateState.hand,
+    privateState.seatIndex
+  );
+  const win = actions.find((action) => action.type === "win");
+  if (win && shouldTakeWin(win, privateState, normalized)) {
+    return win;
+  }
   if (normalized.difficulty === "novice") {
     return pass ?? actions[0]!;
   }
@@ -81,18 +179,20 @@ export function chooseBotClaimAction(
     .filter((action) => action.type === "chow" || action.type === "pong" || action.type === "kong")
     .map((action) => scoreClaimAction(action, privateState.hand, before, normalized))
     .filter((candidate): candidate is ClaimCandidate => Boolean(candidate))
-    .filter((candidate) => normalized.difficulty === "expert" || candidate.score.shanten < before.shanten || candidate.valuable)
-    .sort(compareClaimCandidates);
+    .filter((candidate) => shouldTakeClaimCandidate(candidate, before, normalized))
+    .sort((left, right) => compareClaimCandidates(left, right, normalized));
 
   return claimCandidates[0]?.action ?? pass ?? actions[0]!;
 }
 
 export function chooseBotTurnAction(privateState: PrivatePlayerState, context?: BotDecisionContext): LegalAction | undefined {
   const actions = privateState.legalActions;
+  const normalized = normalizeContext(context, privateState.hand, privateState.seatIndex);
   const win = actions.find((action) => action.type === "win");
-  if (win) return win;
+  if (win && shouldTakeWin(win, privateState, normalized)) {
+    return win;
+  }
 
-  const normalized = normalizeContext(context, privateState.hand);
   if (normalized.difficulty === "novice") {
     return chooseNoviceTurnAction(actions);
   }
@@ -111,6 +211,73 @@ export function chooseBotTurnAction(privateState: PrivatePlayerState, context?: 
   }
 
   return chooseBestDiscardAction(privateState, normalized)?.action ?? actions.find((action) => action.type === "pass");
+}
+
+function shouldTakeWin(action: LegalAction, privateState: PrivatePlayerState, context: NormalizedBotContext): boolean {
+  if (context.difficulty !== "dreamer" || context.mode !== "taiwan") {
+    return true;
+  }
+  return estimateTaiwanWinTai(action, privateState, context) >= 10;
+}
+
+function estimateTaiwanWinTai(action: LegalAction, privateState: PrivatePlayerState, context: NormalizedBotContext): number {
+  const winnerSeat = context.seatIndex;
+  const winningTile = context.claimDiscard ?? drawnTile(privateState);
+  if (!winningTile) {
+    return 0;
+  }
+
+  const winMode = context.claimDiscard ? "discard" : "selfDraw";
+  const fromSeat = action.fromSeat ?? context.claimFromSeat;
+  const players = [0, 1, 2, 3].map((seatIndex) => ({
+    seatIndex,
+    wind: seatIndex === winnerSeat ? context.seatWind ?? fallbackWind(seatIndex) : fallbackWind(seatIndex),
+    hand: seatIndex === winnerSeat ? privateState.hand : [],
+    flowers: seatIndex === winnerSeat ? context.flowers : [],
+    melds: seatIndex === winnerSeat ? contextMelds(context) : [],
+    declaredTing: seatIndex === winnerSeat ? context.declaredTing : false,
+    declaredHeavenTing: seatIndex === winnerSeat ? context.declaredHeavenTing : false,
+    declaredEarthTing: seatIndex === winnerSeat ? context.declaredEarthTing : false
+  }));
+
+  try {
+    return calculateScore(
+      players,
+      {
+        handId: context.handId,
+        dealerSeat: context.dealerSeat,
+        roundWind: context.roundWind ?? "east",
+        dealerStreak: context.dealerStreak,
+        ...(context.config ? { config: context.config } : {})
+      },
+      {
+        winnerSeat,
+        winMode,
+        winningTile,
+        ...(typeof fromSeat === "number" ? { fromSeat, responsibilitySeat: fromSeat } : {}),
+        isAfterKong: context.isAfterKong,
+        isLastTile: context.isLastTile,
+        isInitialWin: context.isInitialWin,
+        isFirstDrawWin: context.isFirstDrawWin
+      }
+    ).baseTai;
+  } catch {
+    return 0;
+  }
+}
+
+function shouldTakeClaimCandidate(candidate: ClaimCandidate, before: HandScore, context: NormalizedBotContext): boolean {
+  if (context.difficulty === "dreamer") {
+    const dreamLoss = before.dreamScore - candidate.score.dreamScore;
+    if (candidate.action.type === "chow" && candidate.score.shanten >= before.shanten && dreamLoss > 0) {
+      return false;
+    }
+    if (dreamLoss > 10 && candidate.score.shanten >= before.shanten) {
+      return false;
+    }
+    return candidate.score.shanten < before.shanten || candidate.valuable || candidate.score.dreamScore >= before.dreamScore + 4;
+  }
+  return context.difficulty === "expert" || candidate.score.shanten < before.shanten || candidate.valuable;
 }
 
 function chooseNoviceTurnAction(actions: LegalAction[]): LegalAction | undefined {
@@ -168,7 +335,7 @@ function chooseBestDiscardAction(
       return scoreDiscardAction(action, tile, hand, context, meldCount);
     })
     .filter((candidate): candidate is DiscardCandidate => Boolean(candidate))
-    .sort(compareDiscardCandidates)[0];
+    .sort((left, right) => compareDiscardCandidates(left, right, context))[0];
 }
 
 function scoreDiscardAction(
@@ -182,7 +349,8 @@ function scoreDiscardAction(
   return {
     action,
     tile,
-    score: scoreTiles(remaining, context, meldCount)
+    score: scoreTiles(remaining, context, meldCount),
+    dangerScore: discardDangerScore(tile, context)
   };
 }
 
@@ -235,7 +403,8 @@ function scoreClaimAction(
     action,
     score: bestAfterDiscard.score,
     priority: action.type === "kong" ? 3 : action.type === "pong" ? 2 : 1,
-    valuable
+    valuable,
+    dangerScore: bestAfterDiscard.dangerScore
   };
 }
 
@@ -256,7 +425,8 @@ function scoreTiles(tiles: Tile[], context: NormalizedBotContext, meldCount = co
     shanten,
     effectiveTileTypes,
     effectiveTileCount,
-    shapeScore: shapeScore(tiles, context, meldCount)
+    shapeScore: shapeScore(tiles, context, meldCount),
+    dreamScore: dreamPotentialScore(tiles, context, meldCount)
   };
 }
 
@@ -404,6 +574,76 @@ function shapeScore(tiles: Tile[], context: NormalizedBotContext, meldCount: num
   return score;
 }
 
+function dreamPotentialScore(tiles: Tile[], context: NormalizedBotContext, meldCount: number): number {
+  if (context.mode !== "taiwan") {
+    return 0;
+  }
+
+  const meldTiles = context.melds.flatMap((meld) => meld.tiles.filter((tile) => tile.kind !== "flower"));
+  const counts = countPlayableTiles([...tiles, ...meldTiles]);
+  const suitedCounts = {
+    characters: 0,
+    dots: 0,
+    bamboo: 0
+  };
+  let honorCount = 0;
+  let score = context.flowers.length * 2;
+  let triplets = 0;
+  let pairs = 0;
+
+  for (const [key, count] of Object.entries(counts)) {
+    const suit = keySuit(key);
+    if (suit) {
+      suitedCounts[suit] += count;
+    } else {
+      honorCount += count;
+    }
+
+    if (count >= 3) {
+      triplets += 1;
+      score += key.startsWith("dragon:") || key.startsWith("wind:") ? 13 : 8;
+      if (count === 4) {
+        score += 3;
+      }
+    } else if (count === 2) {
+      pairs += 1;
+      score += key.startsWith("dragon:") || key.startsWith("wind:") ? 7 : 4;
+    }
+
+    if (key.startsWith("dragon:")) {
+      score += count >= 3 ? 8 : count === 2 ? 5 : 1;
+    }
+    if (key === `wind:${context.seatWind}` || key === `wind:${context.roundWind}`) {
+      score += count >= 3 ? 8 : count === 2 ? 5 : 1;
+    }
+  }
+
+  const suitValues = Object.values(suitedCounts);
+  const suitedTotal = suitValues.reduce((total, count) => total + count, 0);
+  const dominantSuitCount = Math.max(...suitValues);
+  const offSuitCount = suitedTotal - dominantSuitCount;
+  if (dominantSuitCount > 0) {
+    score += dominantSuitCount * 2 - offSuitCount * 4;
+    if (offSuitCount === 0) {
+      score += honorCount > 0 ? 24 : 32;
+    } else if (dominantSuitCount >= 8 && offSuitCount <= 2) {
+      score += 14 - offSuitCount * 4;
+    }
+  }
+
+  score += triplets * 5 + pairs * 2;
+  if (triplets + pairs >= 5) {
+    score += 12;
+  }
+  if (context.melds.every((meld) => meld.concealed)) {
+    score += 5;
+  }
+  score -= context.melds.filter((meld) => meld.type === "chow").length * 10;
+  score += meldCount * 2;
+
+  return score;
+}
+
 function suitedSingletonScore(tile: Tile, counts: Record<string, number>): number {
   if (!tile.suit || !tile.rank) {
     return 0;
@@ -418,7 +658,15 @@ function suitedSingletonScore(tile: Tile, counts: Record<string, number>): numbe
   return middle + neighbors * 2;
 }
 
-function compareDiscardCandidates(left: DiscardCandidate, right: DiscardCandidate): number {
+function compareDiscardCandidates(left: DiscardCandidate, right: DiscardCandidate, context: NormalizedBotContext): number {
+  if (context.difficulty === "expert") {
+    const safety = compareExpertDanger(left.dangerScore, right.dangerScore, left.score.shanten, right.score.shanten);
+    if (safety !== 0) return safety;
+  }
+  if (context.difficulty === "dreamer") {
+    const dream = compareDreamPotential(left.score, right.score);
+    if (dream !== 0) return dream;
+  }
   const shanten = left.score.shanten - right.score.shanten;
   if (shanten !== 0) return shanten;
   const effectiveCount = right.score.effectiveTileCount - left.score.effectiveTileCount;
@@ -430,7 +678,15 @@ function compareDiscardCandidates(left: DiscardCandidate, right: DiscardCandidat
   return tileKeepValue(left.tile) - tileKeepValue(right.tile);
 }
 
-function compareClaimCandidates(left: ClaimCandidate, right: ClaimCandidate): number {
+function compareClaimCandidates(left: ClaimCandidate, right: ClaimCandidate, context: NormalizedBotContext): number {
+  if (context.difficulty === "expert") {
+    const safety = compareExpertDanger(left.dangerScore, right.dangerScore, left.score.shanten, right.score.shanten);
+    if (safety !== 0) return safety;
+  }
+  if (context.difficulty === "dreamer") {
+    const dream = compareDreamPotential(left.score, right.score);
+    if (dream !== 0) return dream;
+  }
   const shanten = left.score.shanten - right.score.shanten;
   if (shanten !== 0) return shanten;
   const effective = right.score.effectiveTileCount - left.score.effectiveTileCount;
@@ -438,6 +694,100 @@ function compareClaimCandidates(left: ClaimCandidate, right: ClaimCandidate): nu
   const valuable = Number(right.valuable) - Number(left.valuable);
   if (valuable !== 0) return valuable;
   return right.priority - left.priority;
+}
+
+function compareExpertDanger(leftDanger: number, rightDanger: number, leftShanten: number, rightShanten: number): number {
+  const danger = leftDanger - rightDanger;
+  if (danger === 0) {
+    return 0;
+  }
+  const shantenGap = Math.abs(leftShanten - rightShanten);
+  const highRiskSwing = Math.abs(danger) >= 8 && Math.max(leftDanger, rightDanger) >= 8;
+  if (leftShanten === rightShanten || (highRiskSwing && shantenGap <= 1)) {
+    return danger;
+  }
+  return 0;
+}
+
+function compareDreamPotential(left: HandScore, right: HandScore): number {
+  const shanten = left.shanten - right.shanten;
+  if (Math.abs(shanten) > 1) {
+    return shanten;
+  }
+  const dream = right.dreamScore - left.dreamScore;
+  if (Math.abs(dream) >= 4) {
+    return dream;
+  }
+  return shanten;
+}
+
+function discardDangerScore(tile: Tile, context: NormalizedBotContext): number {
+  if (context.difficulty !== "expert") {
+    return 0;
+  }
+
+  const key = tileKey(tile);
+  const visibleCount = context.visibleTileCounts[key] ?? 0;
+  let danger = 0;
+
+  for (const opponent of context.opponents) {
+    const threat = opponentThreat(opponent, context);
+    if (threat <= 0) {
+      continue;
+    }
+
+    if (opponent.discards.some((discard) => tileKey(discard) === key)) {
+      danger -= threat * 2;
+      continue;
+    }
+
+    danger += threat;
+    if (visibleCount >= 4) {
+      danger -= threat * 2;
+    } else if (visibleCount >= 3) {
+      danger -= threat;
+    } else if (tile.kind === "honor") {
+      danger += visibleCount <= 1 ? threat * 2 : threat;
+    } else if (tile.rank) {
+      if (tile.rank >= 4 && tile.rank <= 6) {
+        danger += Math.ceil(threat * 0.75);
+      } else if (tile.rank === 1 || tile.rank === 9) {
+        danger -= Math.floor(threat * 0.5);
+      }
+    }
+  }
+
+  return Math.max(0, Math.round(danger));
+}
+
+function opponentThreat(opponent: BotVisiblePlayer, context: NormalizedBotContext): number {
+  let threat = 0;
+  if (opponent.declaredRiichi) {
+    threat += 9;
+  }
+  if (opponent.declaredTing) {
+    threat += 8;
+  }
+
+  const exposedMelds = opponent.melds.filter((meld) => !meld.concealed).length;
+  if (exposedMelds >= 3) {
+    threat += 5;
+  } else if (exposedMelds === 2) {
+    threat += 3;
+  } else if (exposedMelds === 1) {
+    threat += 1;
+  }
+
+  if (context.wallCount <= 18) {
+    threat += 4;
+  } else if (context.wallCount <= 30) {
+    threat += 2;
+  }
+  if (opponent.discards.length >= 12) {
+    threat += 2;
+  }
+
+  return threat;
 }
 
 function simulateClaimHand(action: LegalAction, hand: Tile[], discard: Tile): Tile[] | undefined {
@@ -494,14 +844,58 @@ function remainingCopies(key: string, context: NormalizedBotContext): number {
   return Math.max(0, 4 - (context.visibleTileCounts[key] ?? 0));
 }
 
-function normalizeContext(context: BotDecisionContext | undefined, knownTiles: Tile[]): NormalizedBotContext {
+function drawnTile(privateState: PrivatePlayerState): Tile | undefined {
+  if (privateState.drawnTileId) {
+    const tile = privateState.hand.find((candidate) => candidate.id === privateState.drawnTileId);
+    if (tile) {
+      return tile;
+    }
+  }
+  return privateState.hand.at(-1);
+}
+
+function contextMelds(context: NormalizedBotContext): Meld[] {
+  return context.melds;
+}
+
+function fallbackWind(seatIndex: number): Wind {
+  return (["east", "south", "west", "north"] as const)[seatIndex] ?? "east";
+}
+
+function normalizeContext(context: BotDecisionContext | undefined, knownTiles: Tile[], fallbackSeatIndex = 0): NormalizedBotContext {
+  const seatIndex = context?.seatIndex ?? fallbackSeatIndex;
+  const melds = context?.melds ?? [];
   const normalized: NormalizedBotContext = {
     mode: context?.mode ?? "taiwan",
     difficulty: context?.difficulty ?? "beginner",
-    meldCount: context?.melds?.length ?? 0,
-    visibleTileCounts: context?.visibleTileCounts ? { ...context.visibleTileCounts } : countPlayableTiles(knownTiles),
-    wallCount: context?.wallCount ?? 0
+    seatIndex,
+    dealerSeat: context?.dealerSeat ?? 0,
+    meldCount: melds.length,
+    melds,
+    handId: context?.handId ?? "bot-policy-preview",
+    visibleTileCounts: context?.visibleTileCounts
+      ? { ...context.visibleTileCounts }
+      : buildVisibleTileCounts({
+          knownTiles,
+          ownSeatIndex: seatIndex,
+          ...(context?.visiblePlayers ? { visiblePlayers: context.visiblePlayers } : {}),
+          ...(context?.claimDiscard ? { extraTiles: [context.claimDiscard] } : {})
+        }),
+    wallCount: context?.wallCount ?? 0,
+    dealerStreak: context?.dealerStreak ?? 0,
+    flowers: context?.flowers ?? [],
+    declaredTing: context?.declaredTing ?? false,
+    declaredHeavenTing: context?.declaredHeavenTing ?? false,
+    declaredEarthTing: context?.declaredEarthTing ?? false,
+    isAfterKong: context?.isAfterKong ?? false,
+    isLastTile: context?.isLastTile ?? false,
+    isInitialWin: context?.isInitialWin ?? false,
+    isFirstDrawWin: context?.isFirstDrawWin ?? false,
+    opponents: (context?.visiblePlayers ?? []).filter((player) => player.seatIndex !== seatIndex)
   };
+  if (context?.config) {
+    normalized.config = context.config;
+  }
   if (context?.seatWind) {
     normalized.seatWind = context.seatWind;
   }
@@ -510,6 +904,9 @@ function normalizeContext(context: BotDecisionContext | undefined, knownTiles: T
   }
   if (context?.claimDiscard) {
     normalized.claimDiscard = context.claimDiscard;
+  }
+  if (typeof context?.claimFromSeat === "number") {
+    normalized.claimFromSeat = context.claimFromSeat;
   }
   return normalized;
 }

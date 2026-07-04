@@ -28,13 +28,15 @@ const settings: NumericSetting[] = [
 const aiDifficultyOptions: Array<{ value: BotDifficulty; label: string }> = [
   { value: "novice", label: "新手" },
   { value: "beginner", label: "入門" },
-  { value: "expert", label: "專精" }
+  { value: "dreamer", label: "有夢想" },
+  { value: "expert", label: "專家" }
 ];
 
 export const aiDifficultyLabels: Record<BotDifficulty, string> = {
   novice: "新手",
   beginner: "入門",
-  expert: "專精"
+  dreamer: "有夢想",
+  expert: "專家"
 };
 
 export function defaultRoomConfig(mode: GameMode): GameConfig {

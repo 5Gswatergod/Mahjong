@@ -553,7 +553,7 @@ input {
   min-height: 42px;
   padding: 4px;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 4px;
   background: rgba(21, 35, 55, 0.08);
   border: 1px solid rgba(21, 35, 55, 0.12);

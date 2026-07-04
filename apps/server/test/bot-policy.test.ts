@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { createTileFromKey, tileKey } from "@taiwan-mahjong/game-core";
-import type { LegalAction, PrivatePlayerState, Tile } from "@taiwan-mahjong/shared";
-import { chooseBotClaimAction, chooseBotTurnAction, type BotDecisionContext } from "../src/bot-policy.js";
+import type { LegalAction, Meld, PrivatePlayerState, Tile } from "@taiwan-mahjong/shared";
+import {
+  buildVisibleTileCounts,
+  chooseBotClaimAction,
+  chooseBotTurnAction,
+  type BotDecisionContext
+} from "../src/bot-policy.js";
 
 function tile(key: string, copy: number): Tile {
   return createTileFromKey(key, copy);
@@ -16,13 +21,14 @@ function tiles(keys: string[]): Tile[] {
   });
 }
 
-function privateState(hand: Tile[], legalActions: LegalAction[] = discardActions(hand)): PrivatePlayerState {
+function privateState(hand: Tile[], legalActions: LegalAction[] = discardActions(hand), drawnTileId?: string): PrivatePlayerState {
   return {
     seatIndex: 0,
     hand,
     privateMelds: [],
     legalActions,
     winningTiles: [],
+    ...(drawnTileId ? { drawnTileId } : {}),
     tingDiscardIds: [],
     tingHints: []
   };
@@ -205,6 +211,206 @@ describe("bot policy", () => {
     expect(action?.type).toBe("discard");
   });
 
+  it("dreamer refuses a low-tai Taiwan self draw", () => {
+    const hand = tiles([
+      "characters:1",
+      "characters:2",
+      "characters:3",
+      "characters:4",
+      "characters:5",
+      "characters:6",
+      "dots:1",
+      "dots:2",
+      "dots:3",
+      "dots:4",
+      "dots:5",
+      "dots:6",
+      "bamboo:1",
+      "bamboo:2",
+      "bamboo:3",
+      "wind:east",
+      "wind:east"
+    ]);
+    const actions: LegalAction[] = [{ type: "win" }, ...discardActions(hand)];
+
+    const action = chooseBotTurnAction(
+      privateState(hand, actions, hand.at(-1)!.id),
+      context(hand, {
+        difficulty: "dreamer",
+        seatIndex: 0,
+        dealerSeat: 1,
+        seatWind: "south",
+        roundWind: "east"
+      })
+    );
+
+    expect(action?.type).toBe("discard");
+  });
+
+  it("dreamer takes a Taiwan self draw worth at least ten tai", () => {
+    const hand = tiles([
+      "characters:1",
+      "characters:1",
+      "characters:1",
+      "characters:2",
+      "characters:2",
+      "characters:2",
+      "characters:3",
+      "characters:3",
+      "characters:3",
+      "characters:4",
+      "characters:4",
+      "characters:4",
+      "characters:5",
+      "characters:5",
+      "characters:5",
+      "characters:6",
+      "characters:6"
+    ]);
+
+    const action = chooseBotTurnAction(
+      privateState(hand, [{ type: "win" }, ...discardActions(hand)], hand.at(-1)!.id),
+      context(hand, {
+        difficulty: "dreamer",
+        seatIndex: 0,
+        dealerSeat: 1,
+        seatWind: "south",
+        roundWind: "east"
+      })
+    );
+
+    expect(action?.type).toBe("win");
+  });
+
+  it("dreamer passes a low-tai winning claim", () => {
+    const hand = tiles([
+      "characters:1",
+      "characters:2",
+      "characters:3",
+      "characters:4",
+      "characters:5",
+      "characters:6",
+      "dots:1",
+      "dots:2",
+      "dots:3",
+      "dots:4",
+      "dots:5",
+      "dots:6",
+      "bamboo:1",
+      "bamboo:2",
+      "bamboo:3",
+      "wind:east"
+    ]);
+    const discard = tile("wind:east", 1);
+
+    const action = chooseBotClaimAction(
+      [{ type: "win", tileId: discard.id, fromSeat: 1 }, { type: "pass" }],
+      privateState(hand),
+      context([...hand, discard], {
+        difficulty: "dreamer",
+        seatIndex: 0,
+        dealerSeat: 1,
+        seatWind: "south",
+        roundWind: "east",
+        claimDiscard: discard,
+        claimFromSeat: 1
+      })
+    );
+
+    expect(action.type).toBe("pass");
+  });
+
+  it("dreamer discards the off-suit tile to preserve high-tai potential", () => {
+    const hand = tiles([
+      "characters:1",
+      "characters:1",
+      "characters:2",
+      "characters:2",
+      "characters:3",
+      "characters:3",
+      "characters:4",
+      "characters:4",
+      "characters:5",
+      "characters:5",
+      "characters:6",
+      "characters:6",
+      "characters:7",
+      "characters:8",
+      "dragon:red",
+      "dragon:red",
+      "dots:9"
+    ]);
+    const red = hand.find((candidate) => tileKey(candidate) === "dragon:red")!;
+    const offSuit = hand.find((candidate) => tileKey(candidate) === "dots:9")!;
+
+    const action = chooseBotTurnAction(
+      privateState(hand, [
+        { type: "discard", tileId: red.id },
+        { type: "discard", tileId: offSuit.id }
+      ]),
+      context(hand, {
+        difficulty: "dreamer",
+        seatIndex: 0,
+        dealerSeat: 1,
+        seatWind: "south",
+        roundWind: "east"
+      })
+    );
+
+    expect(selectedTileKey(hand, action)).toBe("dots:9");
+  });
+
+  it("expert prefers a safe discard against a declared ready opponent", () => {
+    const hand = tiles([
+      "characters:2",
+      "characters:3",
+      "characters:4",
+      "characters:5",
+      "characters:5",
+      "dots:3",
+      "dots:4",
+      "dots:5",
+      "bamboo:3",
+      "bamboo:4",
+      "bamboo:5",
+      "dragon:red",
+      "dragon:red",
+      "dragon:red",
+      "wind:east",
+      "wind:east",
+      "dots:9"
+    ]);
+    const dangerousMiddle = hand.find((candidate) => tileKey(candidate) === "characters:5")!;
+    const safeDiscard = hand.find((candidate) => tileKey(candidate) === "dots:9")!;
+    const opponentDiscard = tile("dots:9", 1);
+
+    const action = chooseBotTurnAction(
+      privateState(hand, [
+        { type: "discard", tileId: dangerousMiddle.id },
+        { type: "discard", tileId: safeDiscard.id }
+      ]),
+      context([...hand, opponentDiscard], {
+        difficulty: "expert",
+        seatIndex: 0,
+        dealerSeat: 1,
+        seatWind: "south",
+        roundWind: "east",
+        wallCount: 20,
+        visiblePlayers: [
+          {
+            seatIndex: 1,
+            discards: [opponentDiscard],
+            melds: [],
+            declaredTing: true,
+            declaredRiichi: true
+          }
+        ]
+      })
+    );
+
+    expect(selectedTileKey(hand, action)).toBe("dots:9");
+  });
+
   it("takes a winning claim before evaluating melds", () => {
     const hand = tiles(["characters:1", "characters:2"]);
     const discard = tile("characters:3", 0);
@@ -288,5 +494,30 @@ describe("bot policy", () => {
     );
 
     expect(action.type).toBe("pong");
+  });
+
+  it("does not count opponent concealed kong tiles as visible", () => {
+    const ownTiles = [tile("dragon:red", 0)];
+    const concealedKong: Meld = {
+      id: "opponent-hidden-kong",
+      type: "concealedKong",
+      tiles: [tile("dragon:red", 1), tile("dragon:red", 2), tile("dragon:red", 3), tile("dragon:red", 4)],
+      concealed: true
+    };
+
+    const visibleTileCounts = buildVisibleTileCounts({
+      knownTiles: ownTiles,
+      ownSeatIndex: 0,
+      visiblePlayers: [
+        {
+          seatIndex: 1,
+          discards: [],
+          melds: [concealedKong],
+          declaredTing: false
+        }
+      ]
+    });
+
+    expect(visibleTileCounts["dragon:red"]).toBe(1);
   });
 });

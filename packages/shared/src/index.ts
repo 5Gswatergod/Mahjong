@@ -2,7 +2,7 @@ export type Suit = "characters" | "dots" | "bamboo";
 export type Wind = "east" | "south" | "west" | "north";
 export type Dragon = "red" | "green" | "white";
 export type GameMode = "taiwan" | "riichi";
-export type BotDifficulty = "novice" | "beginner" | "expert";
+export type BotDifficulty = "novice" | "beginner" | "dreamer" | "expert";
 export type Flower =
   | "spring"
   | "summer"

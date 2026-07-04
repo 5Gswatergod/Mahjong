@@ -23,7 +23,6 @@ import {
   passExpiredClaimWindow,
   passExpiredTurn,
   seatDistance,
-  tileKey,
   toPublicGameState
 } from "@taiwan-mahjong/game-core";
 import {
@@ -39,7 +38,13 @@ import {
   type Tile,
   winds
 } from "@taiwan-mahjong/shared";
-import { chooseBotClaimAction, chooseBotTurnAction, type BotDecisionContext } from "./bot-policy.js";
+import {
+  buildVisibleTileCounts,
+  chooseBotClaimAction,
+  chooseBotTurnAction,
+  type BotDecisionContext,
+  type BotVisiblePlayer
+} from "./bot-policy.js";
 import { MemoryEventStore, PgEventStore, type EventStore, resolveDatabaseConnection } from "./event-store.js";
 
 declare module "@taiwan-mahjong/shared" {
@@ -98,7 +103,7 @@ const roomConfigSchema = z
     basePoints: z.number().int().min(0).max(100_000).optional(),
     pointPerTai: z.number().int().min(0).max(10_000).optional(),
     initialCoins: z.number().int().min(1_000).max(100_000).optional(),
-    aiDifficulty: z.enum(["novice", "beginner", "expert"]).optional(),
+    aiDifficulty: z.enum(["novice", "beginner", "dreamer", "expert"]).optional(),
     disconnectGraceMs: z.number().int().min(10_000).max(300_000).optional(),
     claimWindowMs: z.number().int().min(3_000).max(30_000).optional(),
     autoDiscardMs: z.number().int().min(5_000).max(120_000).optional(),
@@ -756,51 +761,60 @@ function chooseRunnableBotClaim(room: Room): { seatIndex: number; action: LegalA
 
 function buildBotDecisionContext(game: CoreGame, seatIndex: number): BotDecisionContext {
   const player = game.players[seatIndex]!;
-  const visibleTileCounts: Record<string, number> = {};
-  const seenTileIds = new Set<string>();
-  const addTile = (tile: Tile): void => {
-    if (tile.kind === "flower") {
-      return;
-    }
-    if (seenTileIds.has(tile.id)) {
-      return;
-    }
-    seenTileIds.add(tile.id);
-    const key = tileKey(tile);
-    visibleTileCounts[key] = (visibleTileCounts[key] ?? 0) + 1;
-  };
-
-  for (const tile of player.hand) {
-    addTile(tile);
-  }
-  for (const publicPlayer of game.players) {
-    for (const tile of publicPlayer.discards) {
-      addTile(tile);
-    }
-    for (const meld of publicPlayer.melds) {
-      for (const tile of meld.tiles) {
-        addTile(tile);
-      }
-    }
-  }
+  const visiblePlayers: BotVisiblePlayer[] = game.players.map((publicPlayer) => ({
+    seatIndex: publicPlayer.seatIndex,
+    discards: publicPlayer.discards,
+    melds: publicPlayer.melds.map((meld) =>
+      meld.concealed && publicPlayer.seatIndex !== seatIndex
+        ? {
+            ...meld,
+            tiles: []
+          }
+        : meld
+    ),
+    declaredTing: publicPlayer.declaredTing,
+    ...(publicPlayer.declaredRiichi ? { declaredRiichi: true } : {})
+  }));
+  const extraTiles: Tile[] = [];
   if (game.lastDiscard) {
-    addTile(game.lastDiscard.tile);
+    extraTiles.push(game.lastDiscard.tile);
   }
   if (game.claimWindow) {
-    addTile(game.claimWindow.discard);
+    extraTiles.push(game.claimWindow.discard);
   }
+  const visibleTileCounts = buildVisibleTileCounts({
+    knownTiles: player.hand,
+    visiblePlayers,
+    ownSeatIndex: seatIndex,
+    extraTiles
+  });
 
   const context: BotDecisionContext = {
     mode: game.mode,
     difficulty: game.config.aiDifficulty,
+    seatIndex,
+    dealerSeat: game.dealerSeat,
     seatWind: player.wind,
     roundWind: game.roundWind,
+    dealerStreak: game.dealerStreak,
+    handId: game.handId,
+    config: game.config,
     melds: player.melds,
+    flowers: player.flowers,
+    declaredTing: player.declaredTing,
+    declaredHeavenTing: player.declaredHeavenTing,
+    declaredEarthTing: player.declaredEarthTing,
+    isAfterKong: Boolean(player.drawnTileId?.startsWith("supplement:")),
+    isLastTile: game.wall.length <= (game.mode === "riichi" ? 14 : 16),
+    isInitialWin: seatIndex === game.dealerSeat && !player.firstDiscardMade && !player.firstDrawMade,
+    isFirstDrawWin: seatIndex !== game.dealerSeat && player.firstDrawMade && !player.firstDiscardMade,
+    visiblePlayers,
     visibleTileCounts,
     wallCount: game.wall.length
   };
   if (game.claimWindow) {
     context.claimDiscard = game.claimWindow.discard;
+    context.claimFromSeat = game.claimWindow.fromSeat;
   }
   return context;
 }
