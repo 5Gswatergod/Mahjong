@@ -1,8 +1,7 @@
-import { type CSSProperties } from "react";
 import { Bot, RefreshCw } from "lucide-react";
 import type { GameState, Meld, PublicPlayerState, RoomSnapshot } from "@taiwan-mahjong/shared";
-import { modeLabels, windLabels } from "../constants";
-import { activeDeadline, formatLatency, formatPoints, initials, phaseLabel } from "../utils/labels";
+import { windLabels } from "../constants";
+import { formatPoints, initials } from "../utils/labels";
 import { MeldTiles, MiniTile, TileBacks } from "./Tiles";
 
 export function TableScreen({
@@ -11,9 +10,7 @@ export function TableScreen({
   perspectiveSeatIndex,
   ownSeatIndex,
   privateMelds,
-  myTurn,
-  serverNow,
-  latencyMs
+  myTurn
 }: {
   room: RoomSnapshot;
   game: GameState | null;
@@ -50,102 +47,88 @@ export function TableScreen({
       distance: perspectiveSeatIndex === undefined ? player.seatIndex : (player.seatIndex - perspectiveSeatIndex + 4) % 4
     }))
     .sort((left, right) => left.distance - right.distance);
-  const currentPlayer = game.players.find((player) => player.seatIndex === game.currentSeat);
   const bottomPlayer = orderedSeats.find(({ distance }) => distance === 0)?.player;
   const liveWallCount = Math.max(0, game.wallCount - game.deadWallCount);
   const rightPlayer = orderedSeats.find(({ distance }) => distance === 1)?.player;
   const topPlayer = orderedSeats.find(({ distance }) => distance === 2)?.player;
   const leftPlayer = orderedSeats.find(({ distance }) => distance === 3)?.player;
+  const lastDiscardPlayer = game.lastDiscard ? game.players[game.lastDiscard.seatIndex] : undefined;
 
   return (
     <div className={myTurn ? "gameBoard scaledTableBoard myTurn" : "gameBoard scaledTableBoard"}>
       <div className="tableStage">
-      <div className="tableFelt" aria-hidden="true">
-        <span className="feltGuide guideTop" />
-        <span className="feltGuide guideRight" />
-        <span className="feltGuide guideBottom" />
-        <span className="feltGuide guideLeft" />
-      </div>
-      <div className="wallRail wallTop">
-        <TileBacks count={18} />
-      </div>
-      <div className="wallRail wallRight">
-        <TileBacks count={16} vertical />
-      </div>
-      <div className="wallRail wallLeft">
-        <TileBacks count={16} vertical />
-      </div>
-
-      {orderedSeats.map(({ player, distance }) => (
-        <PlayerBadgeCard
-          key={`badge-${player.seatIndex}`}
-          player={player}
-          distance={distance}
-          active={game.currentSeat === player.seatIndex}
-          isSelf={player.seatIndex === ownSeatIndex}
-        />
-      ))}
-
-      {orderedSeats.map(({ player, distance }) => (
-        <FlowerRail key={`flowers-${player.seatIndex}`} player={player} distance={distance} />
-      ))}
-
-      {orderedSeats.map(({ player, distance }) => (
-        <MeldRail
-          key={`melds-${player.seatIndex}`}
-          player={player}
-          distance={distance}
-          isSelf={player.seatIndex === ownSeatIndex}
-          privateMelds={player.seatIndex === ownSeatIndex ? privateMelds : undefined}
-        />
-      ))}
-
-      {orderedSeats.map(({ player, distance }) => (
-        <PlayerSpot
-          key={player.seatIndex}
-          player={player}
-          distance={distance}
-          active={game.currentSeat === player.seatIndex}
-          isSelf={player.seatIndex === ownSeatIndex}
-        />
-      ))}
-
-      {orderedSeats.map(({ player, distance }) => (
-        <RiverLane key={`river-${player.seatIndex}`} player={player} distance={distance} />
-      ))}
-
-      <div className="centerConsole">
-        <span className="windMarker markerTop">{windLabels[topPlayer?.wind ?? "north"]}</span>
-        <span className="windMarker markerRight">{windLabels[rightPlayer?.wind ?? "east"]}</span>
-        <span className="windMarker markerBottom">{windLabels[bottomPlayer?.wind ?? "south"]}</span>
-        <span className="windMarker markerLeft">{windLabels[leftPlayer?.wind ?? "west"]}</span>
-        <div className="roundDial">
-          <span>{modeLabels[game.mode]}</span>
-          <strong>{windLabels[game.roundWind]}場</strong>
-          <span>剩 {liveWallCount}</span>
-          <span>{currentPlayer ? `${windLabels[currentPlayer.wind]}家` : "-"}</span>
-          <span className="wide">{game.mode === "riichi" ? `${game.riichi?.honba ?? game.dealerStreak} 本場` : `${game.dealerStreak} 連莊`}</span>
+        <div className="tableFelt" aria-hidden="true">
+          <span className="feltGuide guideTop" />
+          <span className="feltGuide guideRight" />
+          <span className="feltGuide guideBottom" />
+          <span className="feltGuide guideLeft" />
         </div>
-        <div className="centerPoints">
-          <strong>{formatPoints(bottomPlayer?.coins ?? 0)}</strong>
-          <span>{phaseLabel(game.phase)}</span>
+        <div className="wallRail wallTop">
+          <TileBacks count={18} />
         </div>
-        <TurnCountdown game={game} serverNow={serverNow} latencyMs={latencyMs} />
-        {game.riichi && (
-          <div className="centerDora">
-            <span>寶牌</span>
-            {game.riichi.doraIndicators.map((tile) => (
-              <MiniTile key={tile.id} tile={tile} />
-            ))}
+        <div className="wallRail wallRight">
+          <TileBacks count={16} vertical />
+        </div>
+        <div className="wallRail wallLeft">
+          <TileBacks count={16} vertical />
+        </div>
+
+        {orderedSeats.map(({ player, distance }) => (
+          <PlayerBadgeCard
+            key={`badge-${player.seatIndex}`}
+            player={player}
+            distance={distance}
+            active={game.currentSeat === player.seatIndex}
+            isSelf={player.seatIndex === ownSeatIndex}
+          />
+        ))}
+
+        {orderedSeats.map(({ player, distance }) => (
+          <FlowerRail key={`flowers-${player.seatIndex}`} player={player} distance={distance} />
+        ))}
+
+        {orderedSeats.map(({ player, distance }) => (
+          <MeldRail
+            key={`melds-${player.seatIndex}`}
+            player={player}
+            distance={distance}
+            isSelf={player.seatIndex === ownSeatIndex}
+            privateMelds={player.seatIndex === ownSeatIndex ? privateMelds : undefined}
+          />
+        ))}
+
+        {orderedSeats.map(({ player, distance }) => (
+          <PlayerSpot
+            key={player.seatIndex}
+            player={player}
+            distance={distance}
+            active={game.currentSeat === player.seatIndex}
+            isSelf={player.seatIndex === ownSeatIndex}
+          />
+        ))}
+
+        {orderedSeats.map(({ player, distance }) => (
+          <RiverLane key={`river-${player.seatIndex}`} player={player} distance={distance} />
+        ))}
+
+        <div className="centerConsole">
+          <span className="windMarker markerTop">{windLabels[topPlayer?.wind ?? "north"]}</span>
+          <span className="windMarker markerRight">{windLabels[rightPlayer?.wind ?? "east"]}</span>
+          <span className="windMarker markerBottom">{windLabels[bottomPlayer?.wind ?? "south"]}</span>
+          <span className="windMarker markerLeft">{windLabels[leftPlayer?.wind ?? "west"]}</span>
+          <div className="centerWallCount" aria-label={`剩 ${liveWallCount} 張`}>
+            <span>剩</span>
+            <strong>{liveWallCount}</strong>
+            <span>張</span>
           </div>
-        )}
-        {game.lastDiscard && (
-          <div className="lastDiscard">
-            <MiniTile tile={game.lastDiscard.tile} />
-            <span className="lastDiscardLabel">{windLabels[game.players[game.lastDiscard.seatIndex]?.wind ?? "east"]}家打出</span>
+          <div
+            className={game.lastDiscard ? "lastDiscard" : "lastDiscard empty"}
+            aria-label={game.lastDiscard && lastDiscardPlayer ? `${windLabels[lastDiscardPlayer.wind]}家打出` : "尚未出牌"}
+          >
+            <span className="lastDiscardTileSlot">{game.lastDiscard ? <MiniTile tile={game.lastDiscard.tile} /> : null}</span>
+            <span className="lastDiscardLabel">{game.lastDiscard && lastDiscardPlayer ? `${windLabels[lastDiscardPlayer.wind]}家打出` : ""}</span>
           </div>
-        )}
-      </div>
+        </div>
       </div>
     </div>
   );
@@ -249,7 +232,6 @@ function PlayerSpot({
           <TileBacks count={Math.min(player.handCount, 18)} vertical={distance === 1 || distance === 3} />
         </div>
       ) : null}
-
     </div>
   );
 }
@@ -265,30 +247,6 @@ function RiverLane({ player, distance }: { player: PublicPlayerState; distance: 
       {latestDiscards.map((tile) => (
         <MiniTile key={tile.id} tile={tile} />
       ))}
-    </div>
-  );
-}
-
-function TurnCountdown({ game, serverNow, latencyMs }: { game: GameState; serverNow: number; latencyMs: number | null }) {
-  const deadline = activeDeadline(game);
-  if (!deadline) return null;
-
-  const totalMs = game.phase === "claiming" ? game.config.claimWindowMs : game.config.autoDiscardMs;
-  const remainingMs = Math.max(0, deadline - serverNow);
-  const seconds = Math.max(0, Math.ceil(remainingMs / 1000));
-  const progress = Math.max(0, Math.min(1, remainingMs / Math.max(totalMs, 1)));
-  const urgent = seconds <= 3;
-  const style = { "--timer-progress": `${progress * 360}deg` } as CSSProperties;
-
-  return (
-    <div className={urgent ? "turnCountdown urgent" : "turnCountdown"}>
-      <div className="timerRing" style={style}>
-        <span>{seconds}</span>
-      </div>
-      <div className="timerMeta">
-        <strong>{game.phase === "claiming" ? "回應倒數" : "出牌倒數"}</strong>
-        <span>延遲 {formatLatency(latencyMs)}</span>
-      </div>
     </div>
   );
 }

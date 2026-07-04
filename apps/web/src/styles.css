@@ -1371,11 +1371,12 @@ input {
   position: absolute;
   left: 50%;
   top: 52%;
-  width: min(230px, 34%);
-  min-height: 150px;
+  width: min(156px, 34%);
+  aspect-ratio: 1;
   padding: 12px;
   display: grid;
-  place-items: center;
+  grid-template-rows: minmax(0, 0.76fr) minmax(0, 1fr);
+  place-items: stretch;
   gap: 8px;
   color: #fff7df;
   background:
@@ -1396,8 +1397,7 @@ input {
 }
 
 .roundDial span,
-.roundDial strong,
-.lastDiscardLabel {
+.roundDial strong {
   min-width: 0;
   padding: 4px 6px;
   overflow: hidden;
@@ -1433,6 +1433,69 @@ input {
   color: #cad2df;
   font-size: 11px;
   font-weight: 900;
+}
+
+.centerWallCount,
+.lastDiscard {
+  min-width: 0;
+  width: 100%;
+  display: grid;
+  place-items: center;
+  color: #fff7df;
+  background: rgba(42, 64, 84, 0.7);
+  border: 1px solid rgba(101, 198, 202, 0.16);
+  border-radius: 8px;
+}
+
+.centerWallCount {
+  grid-template-columns: auto auto auto;
+  justify-content: center;
+  gap: 3px;
+  padding: 6px;
+  font-weight: 1000;
+}
+
+.centerWallCount span {
+  color: #d7e6ea;
+  font-size: 12px;
+}
+
+.centerWallCount strong {
+  color: #8ce6df;
+  font-size: 28px;
+  line-height: 1;
+  text-shadow: 0 0 10px rgba(88, 227, 218, 0.35);
+}
+
+.lastDiscard {
+  grid-template-rows: 36px 16px;
+  gap: 2px;
+  padding: 4px 6px;
+}
+
+.lastDiscard.empty .lastDiscardTileSlot,
+.lastDiscard.empty .lastDiscardLabel {
+  visibility: hidden;
+}
+
+.lastDiscardTileSlot {
+  width: 30px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+}
+
+.lastDiscardLabel {
+  min-width: 0;
+  max-width: 100%;
+  min-height: 16px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #d7e6ea;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 16px;
 }
 
 .turnCountdown {
@@ -1504,12 +1567,6 @@ input {
   background: conic-gradient(#ff665c var(--timer-progress), rgba(255, 255, 255, 0.12) 0);
 }
 
-.lastDiscard {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
 .centerDora {
   max-width: 100%;
   padding: 4px 5px;
@@ -1533,9 +1590,9 @@ input {
 }
 
 .lastDiscard .miniTile {
-  width: 34px;
-  min-width: 34px;
-  height: 48px;
+  width: 26px;
+  min-width: 26px;
+  height: 36px;
   box-shadow: 0 0 0 2px rgba(245, 202, 96, 0.2);
 }
 
@@ -1571,8 +1628,6 @@ input {
 .gameBoard::after {
   z-index: 0;
   background:
-    linear-gradient(120deg, transparent 48%, rgba(0, 0, 0, 0.18) 49%, transparent 51%),
-    linear-gradient(60deg, transparent 48%, rgba(0, 0, 0, 0.18) 49%, transparent 51%),
     radial-gradient(circle at 50% 50%, rgba(69, 196, 193, 0.12), transparent 34%);
 }
 
@@ -1590,6 +1645,7 @@ input {
   position: absolute;
   left: 50%;
   top: 50%;
+  display: none;
   width: 48%;
   height: 1px;
   background: linear-gradient(90deg, rgba(4, 15, 28, 0.44), rgba(125, 177, 201, 0.22));
@@ -1788,10 +1844,11 @@ input {
 }
 
 .centerConsole {
-  width: 172px;
-  min-height: 156px;
-  padding: 22px 18px 16px;
-  gap: 6px;
+  width: 146px;
+  min-height: 0;
+  aspect-ratio: 1;
+  padding: 20px 14px 14px;
+  gap: 7px;
   overflow: visible;
   background: none;
   border: 0;
@@ -1868,9 +1925,15 @@ input {
 
 .roundDial span,
 .roundDial strong,
-.lastDiscardLabel {
+.centerWallCount,
+.lastDiscard {
   background: rgba(42, 64, 84, 0.7);
   border: 1px solid rgba(101, 198, 202, 0.16);
+}
+
+.centerWallCount strong {
+  color: #8ce6df;
+  text-shadow: 0 0 10px rgba(88, 227, 218, 0.35);
 }
 
 .centerPoints strong {
@@ -2846,10 +2909,11 @@ input {
 
   .centerConsole {
     top: 53%;
-    width: 160px;
-    min-height: 140px;
-    padding: 18px 14px 13px;
-    gap: 5px;
+    width: 136px;
+    min-height: 0;
+    aspect-ratio: 1;
+    padding: 18px 12px 12px;
+    gap: 6px;
   }
 
   .windMarker {
@@ -2879,9 +2943,12 @@ input {
   }
 
   .roundDial span,
-  .roundDial strong,
-  .lastDiscardLabel {
+  .roundDial strong {
     padding: 3px 4px;
+    font-size: 10px;
+  }
+
+  .lastDiscardLabel {
     font-size: 10px;
   }
 
@@ -2920,9 +2987,9 @@ input {
   }
 
   .lastDiscard .miniTile {
-    width: 28px;
-    min-width: 28px;
-    height: 40px;
+    width: 26px;
+    min-width: 26px;
+    height: 36px;
   }
 
   .handDock {
@@ -3156,9 +3223,10 @@ input {
 
   .centerConsole {
     top: 51%;
-    width: min(136px, 40%);
+    width: min(122px, 38%);
     min-height: 0;
-    padding: 12px 8px 10px;
+    aspect-ratio: 1;
+    padding: 12px 8px 8px;
     gap: 3px;
   }
 
@@ -3189,10 +3257,22 @@ input {
   }
 
   .roundDial span,
-  .roundDial strong,
-  .lastDiscardLabel {
+  .roundDial strong {
     padding: 2px 3px;
     font-size: 9px;
+  }
+
+  .lastDiscardLabel {
+    font-size: 9px;
+  }
+
+  .centerWallCount strong {
+    font-size: 22px;
+  }
+
+  .lastDiscardTileSlot {
+    width: 30px;
+    height: 36px;
   }
 
   .centerPoints strong {
@@ -3356,7 +3436,8 @@ input {
   }
 
   .centerConsole {
-    min-height: 116px;
+    min-height: 0;
+    aspect-ratio: 1;
     padding: 8px;
   }
 
@@ -3456,7 +3537,7 @@ input {
   }
 
   .centerConsole {
-    width: min(136px, 40%);
+    width: min(118px, 38%);
   }
 
   .catalogHeader {
@@ -3495,10 +3576,23 @@ input {
   transform-origin: center;
 }
 
+.scaledTableBoard {
+  --table-edge: clamp(8px, 1vw, 16px);
+  --table-badge-width: clamp(150px, 13vw, 178px);
+  --table-corner-row-offset: calc(var(--table-edge) + 64px);
+  --table-flower-x: calc(var(--table-edge) + var(--table-badge-width) + 14px);
+  --table-flower-y: calc(var(--table-edge) + 6px);
+  --table-side-spot: clamp(112px, 10.8vw, 148px);
+  --table-horizontal-spot-width: min(760px, calc(100% - (var(--table-side-spot) * 2) - 96px));
+  --table-top-wall-y: clamp(78px, 8.8dvh, 96px);
+  --table-top-spot-y: clamp(120px, 13.5dvh, 152px);
+  --table-bottom-spot-y: clamp(104px, 12.8dvh, 132px);
+}
+
 .scaledTableBoard .playerBadgeRail {
   position: absolute;
   z-index: 7;
-  width: 178px;
+  width: var(--table-badge-width);
   pointer-events: none;
   filter: drop-shadow(0 10px 12px rgba(0, 0, 0, 0.32));
 }
@@ -3520,25 +3614,25 @@ input {
 }
 
 .scaledTableBoard .meldRail0 {
-  right: 16px;
-  bottom: 76px;
+  right: var(--table-edge);
+  bottom: var(--table-corner-row-offset);
   justify-content: flex-end;
 }
 
 .scaledTableBoard .meldRail1 {
-  right: 16px;
-  top: 76px;
+  right: var(--table-edge);
+  top: var(--table-corner-row-offset);
   justify-content: flex-end;
 }
 
 .scaledTableBoard .meldRail2 {
-  left: 16px;
-  top: 76px;
+  left: var(--table-edge);
+  top: var(--table-corner-row-offset);
 }
 
 .scaledTableBoard .meldRail3 {
-  left: 16px;
-  bottom: 76px;
+  left: var(--table-edge);
+  bottom: var(--table-corner-row-offset);
 }
 
 .scaledTableBoard .flowerRail {
@@ -3557,45 +3651,45 @@ input {
 }
 
 .scaledTableBoard .flowerRail0 {
-  right: 204px;
-  bottom: 18px;
+  right: var(--table-flower-x);
+  bottom: var(--table-flower-y);
   justify-content: flex-end;
 }
 
 .scaledTableBoard .flowerRail1 {
-  right: 204px;
-  top: 18px;
+  right: var(--table-flower-x);
+  top: var(--table-flower-y);
   justify-content: flex-end;
 }
 
 .scaledTableBoard .flowerRail2 {
-  left: 204px;
-  top: 18px;
+  left: var(--table-flower-x);
+  top: var(--table-flower-y);
 }
 
 .scaledTableBoard .flowerRail3 {
-  left: 204px;
-  bottom: 18px;
+  left: var(--table-flower-x);
+  bottom: var(--table-flower-y);
 }
 
 .scaledTableBoard .badge0 {
-  right: 12px;
-  bottom: 12px;
+  right: var(--table-edge);
+  bottom: var(--table-edge);
 }
 
 .scaledTableBoard .badge1 {
-  right: 12px;
-  top: 12px;
+  right: var(--table-edge);
+  top: var(--table-edge);
 }
 
 .scaledTableBoard .badge2 {
-  left: 12px;
-  top: 12px;
+  left: var(--table-edge);
+  top: var(--table-edge);
 }
 
 .scaledTableBoard .badge3 {
-  left: 12px;
-  bottom: 12px;
+  left: var(--table-edge);
+  bottom: var(--table-edge);
 }
 
 .scaledTableBoard .playerBadge {
@@ -3639,7 +3733,7 @@ input {
 .scaledTableBoard .wallTop {
   left: 25%;
   right: 25%;
-  top: 96px;
+  top: var(--table-top-wall-y);
 }
 
 .scaledTableBoard .wallRight {
@@ -3654,13 +3748,13 @@ input {
 
 .scaledTableBoard .spot0 {
   left: 50%;
-  bottom: 132px;
-  width: 760px;
+  bottom: var(--table-bottom-spot-y);
+  width: var(--table-horizontal-spot-width);
   transform: translateX(-50%);
 }
 
 .scaledTableBoard .spot1 {
-  right: 148px;
+  right: var(--table-side-spot);
   top: 50%;
   width: 102px;
   transform: translateY(-50%);
@@ -3668,13 +3762,13 @@ input {
 
 .scaledTableBoard .spot2 {
   left: 50%;
-  top: 152px;
-  width: 760px;
+  top: var(--table-top-spot-y);
+  width: var(--table-horizontal-spot-width);
   transform: translateX(-50%);
 }
 
 .scaledTableBoard .spot3 {
-  left: 148px;
+  left: var(--table-side-spot);
   top: 50%;
   width: 102px;
   transform: translateY(-50%);
@@ -3754,10 +3848,11 @@ input {
   .scaledTableBoard .centerConsole {
     left: 50%;
     top: 52%;
-    width: 172px;
-    min-height: 156px;
-    padding: 22px 18px 16px;
-    gap: 6px;
+    width: 146px;
+    min-height: 0;
+    aspect-ratio: 1;
+    padding: 20px 14px 14px;
+    gap: 7px;
     transform: translate(-50%, -50%);
   }
 
@@ -3787,11 +3882,12 @@ input {
     gap: 4px;
   }
 
-  .scaledTableBoard .roundDial span,
-  .scaledTableBoard .roundDial strong,
+  .scaledTableBoard .centerWallCount strong {
+    font-size: 28px;
+  }
+
   .scaledTableBoard .lastDiscardLabel {
-    padding: 4px 6px;
-    font-size: 11px;
+    font-size: 10px;
   }
 
   .scaledTableBoard .centerPoints strong {
@@ -3829,9 +3925,92 @@ input {
   }
 
   .scaledTableBoard .lastDiscard .miniTile {
-    width: 34px;
-    min-width: 34px;
-    height: 48px;
+    width: 26px;
+    min-width: 26px;
+    height: 36px;
+  }
+}
+
+@media (min-width: 861px) and (max-width: 1366px) and (min-height: 820px) {
+  .activeGameScene .boardStack {
+    width: 100%;
+    grid-template-rows: minmax(620px, 720px) auto auto;
+  }
+
+  .activeGameScene .gameBoard {
+    min-height: min(720px, calc(100dvh - 244px));
+  }
+
+  .scaledTableBoard {
+    --table-edge: 10px;
+    --table-badge-width: clamp(156px, 13vw, 170px);
+    --table-corner-row-offset: 70px;
+    --table-flower-x: calc(var(--table-edge) + var(--table-badge-width) + 12px);
+    --table-flower-y: 14px;
+    --table-side-spot: clamp(114px, 10vw, 132px);
+    --table-horizontal-spot-width: min(700px, calc(100% - (var(--table-side-spot) * 2) - 78px));
+    --table-top-wall-y: 90px;
+    --table-top-spot-y: 140px;
+    --table-bottom-spot-y: 118px;
+  }
+
+  .scaledTableBoard .meldRail {
+    max-width: 248px;
+  }
+
+  .scaledTableBoard .flowerRail {
+    max-width: 184px;
+  }
+
+  .scaledTableBoard .wallTop {
+    left: 27%;
+    right: 27%;
+  }
+
+  .scaledTableBoard .wallRight {
+    right: 5.5%;
+    top: 31%;
+  }
+
+  .scaledTableBoard .wallLeft {
+    left: 5.5%;
+    top: 31%;
+  }
+
+  .scaledTableBoard .river1 {
+    right: 29%;
+    width: 224px;
+  }
+
+  .scaledTableBoard .river3 {
+    left: 29%;
+    width: 224px;
+  }
+}
+
+@media (min-width: 861px) and (max-width: 1180px) and (orientation: portrait) {
+  .gameAppShell {
+    padding: 10px 10px calc(10px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .gameExperience {
+    min-height: calc(100dvh - 20px - env(safe-area-inset-bottom, 0px));
+  }
+
+  .activeGameScene .boardStack {
+    grid-template-rows: minmax(700px, 1fr) auto auto;
+  }
+
+  .activeGameScene .gameBoard {
+    min-height: min(820px, calc(100dvh - 228px));
+  }
+
+  .scaledTableBoard {
+    --table-side-spot: 112px;
+    --table-horizontal-spot-width: min(680px, calc(100% - 304px));
+    --table-top-wall-y: 96px;
+    --table-top-spot-y: 152px;
+    --table-bottom-spot-y: 126px;
   }
 }
 
@@ -3845,8 +4024,42 @@ input {
     transform: none;
   }
 
+  .scaledTableBoard {
+    --table-edge: 6px;
+    --table-badge-width: clamp(108px, 32vw, 128px);
+    --table-corner-row-offset: calc(var(--table-edge) + 52px);
+    --table-flower-x: calc(var(--table-edge) + var(--table-badge-width) + 8px);
+    --table-flower-y: var(--table-edge);
+    --table-side-spot: clamp(70px, 18vw, 92px);
+    --table-horizontal-spot-width: min(360px, 76%);
+    --table-top-wall-y: 70px;
+    --table-top-spot-y: 92px;
+    --table-bottom-spot-y: 72px;
+  }
+
   .scaledTableBoard .playerBadgeRail {
-    width: 128px;
+    width: var(--table-badge-width);
+  }
+
+  .scaledTableBoard .wallTop {
+    left: 15%;
+    right: 15%;
+    top: var(--table-top-wall-y);
+  }
+
+  .scaledTableBoard .wallRight,
+  .scaledTableBoard .wallLeft {
+    display: none;
+  }
+
+  .scaledTableBoard .wallRail .tileBacks {
+    justify-content: center;
+    gap: 2px;
+  }
+
+  .scaledTableBoard .wallRail .tileBacks span {
+    width: clamp(11px, 3.2vw, 14px);
+    height: clamp(17px, 4.9vw, 21px);
   }
 
   .scaledTableBoard .meldRail {
@@ -3856,23 +4069,23 @@ input {
   }
 
   .scaledTableBoard .meldRail0 {
-    right: 6px;
-    bottom: 58px;
+    right: var(--table-edge);
+    bottom: var(--table-corner-row-offset);
   }
 
   .scaledTableBoard .meldRail1 {
-    right: 6px;
-    top: 58px;
+    right: var(--table-edge);
+    top: var(--table-corner-row-offset);
   }
 
   .scaledTableBoard .meldRail2 {
-    left: 6px;
-    top: 58px;
+    left: var(--table-edge);
+    top: var(--table-corner-row-offset);
   }
 
   .scaledTableBoard .meldRail3 {
-    left: 6px;
-    bottom: 58px;
+    left: var(--table-edge);
+    bottom: var(--table-corner-row-offset);
   }
 
   .scaledTableBoard .flowerRail {
@@ -3889,43 +4102,43 @@ input {
   }
 
   .scaledTableBoard .flowerRail0 {
-    right: 142px;
-    bottom: 8px;
+    right: var(--table-flower-x);
+    bottom: var(--table-flower-y);
   }
 
   .scaledTableBoard .flowerRail1 {
-    right: 142px;
-    top: 8px;
+    right: var(--table-flower-x);
+    top: var(--table-flower-y);
   }
 
   .scaledTableBoard .flowerRail2 {
-    left: 142px;
-    top: 8px;
+    left: var(--table-flower-x);
+    top: var(--table-flower-y);
   }
 
   .scaledTableBoard .flowerRail3 {
-    left: 142px;
-    bottom: 8px;
+    left: var(--table-flower-x);
+    bottom: var(--table-flower-y);
   }
 
   .scaledTableBoard .badge0 {
-    right: 6px;
-    bottom: 6px;
+    right: var(--table-edge);
+    bottom: var(--table-edge);
   }
 
   .scaledTableBoard .badge1 {
-    right: 6px;
-    top: 6px;
+    right: var(--table-edge);
+    top: var(--table-edge);
   }
 
   .scaledTableBoard .badge2 {
-    left: 6px;
-    top: 6px;
+    left: var(--table-edge);
+    top: var(--table-edge);
   }
 
   .scaledTableBoard .badge3 {
-    left: 6px;
-    bottom: 6px;
+    left: var(--table-edge);
+    bottom: var(--table-edge);
   }
 
   .scaledTableBoard .playerBadge {
@@ -3964,22 +4177,22 @@ input {
   }
 
   .scaledTableBoard .spot0 {
-    bottom: 62px;
-    width: min(360px, 76%);
+    bottom: var(--table-bottom-spot-y);
+    width: var(--table-horizontal-spot-width);
   }
 
   .scaledTableBoard .spot1 {
-    right: 92px;
+    right: var(--table-side-spot);
     width: 58px;
   }
 
   .scaledTableBoard .spot2 {
-    top: 62px;
-    width: min(360px, 76%);
+    top: var(--table-top-spot-y);
+    width: var(--table-horizontal-spot-width);
   }
 
   .scaledTableBoard .spot3 {
-    left: 92px;
+    left: var(--table-side-spot);
     width: 58px;
   }
 
@@ -3996,5 +4209,476 @@ input {
     width: 20px;
     min-width: 20px;
     height: 28px;
+  }
+}
+
+@media (max-width: 430px) {
+  .gameAppShell {
+    padding:
+      max(6px, env(safe-area-inset-top, 0px))
+      max(6px, env(safe-area-inset-right, 0px))
+      calc(6px + env(safe-area-inset-bottom, 0px))
+      max(6px, env(safe-area-inset-left, 0px));
+  }
+
+  .gameExperience {
+    min-height: calc(100dvh - 12px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    gap: 6px;
+  }
+
+  .gameHeader {
+    min-height: 52px;
+    padding: 6px;
+    gap: 8px;
+  }
+
+  .brandTile.compact {
+    width: 32px;
+    height: 40px;
+    font-size: 18px;
+  }
+
+  .gameTitle {
+    gap: 8px;
+  }
+
+  .gameTitle h1 {
+    font-size: 15px;
+  }
+
+  .gameTitle p {
+    font-size: 11px;
+  }
+
+  .gameHeaderActions {
+    gap: 4px;
+  }
+
+  .iconButton {
+    width: 34px;
+    min-height: 34px;
+  }
+
+  .activeGameScene .boardStack {
+    grid-template-rows: minmax(clamp(400px, calc(100dvh - 250px), 600px), 1fr) auto auto;
+    gap: 6px;
+  }
+
+  .activeGameScene .gameBoard {
+    min-height: clamp(400px, calc(100dvh - 250px), 600px);
+  }
+
+  .activeGameScene .boardStack:has(.actionDock) {
+    grid-template-rows: minmax(400px, clamp(400px, calc(100dvh - 250px), 600px)) auto auto;
+  }
+
+  .actionDock {
+    min-height: 48px;
+    gap: 5px;
+  }
+
+  .actionButton {
+    min-width: 48px;
+    min-height: 40px;
+    padding: 0 10px;
+    font-size: 15px;
+  }
+
+  .actionButton.withPreview {
+    min-height: 58px;
+    padding: 5px 8px;
+  }
+
+  .handDock {
+    min-height: 88px;
+    grid-template-columns: 38px minmax(0, 1fr);
+    gap: 6px;
+    padding: 8px 6px calc(8px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .handStatus {
+    min-height: 58px;
+    font-size: 12px;
+  }
+
+  .tileButton {
+    flex-basis: 35px;
+    width: 35px;
+    height: 55px;
+  }
+
+  .tileButton.drawn {
+    margin-left: 6px;
+  }
+
+  .scaledTableBoard {
+    --table-edge: 5px;
+    --table-badge-width: clamp(104px, 31vw, 116px);
+    --table-corner-row-offset: 52px;
+    --table-flower-x: calc(var(--table-edge) + var(--table-badge-width) + 6px);
+    --table-flower-y: var(--table-edge);
+    --table-side-spot: clamp(62px, 17vw, 76px);
+    --table-horizontal-spot-width: min(320px, 72%);
+    --table-top-wall-y: 66px;
+    --table-top-spot-y: 86px;
+    --table-bottom-spot-y: 68px;
+  }
+
+  .scaledTableBoard .playerBadge {
+    min-height: 42px;
+    grid-template-columns: 28px minmax(0, 1fr);
+    gap: 5px;
+    padding: 4px;
+  }
+
+  .scaledTableBoard .playerBadge .avatar {
+    width: 27px;
+    height: 27px;
+  }
+
+  .scaledTableBoard .playerBadge strong {
+    font-size: 11px;
+  }
+
+  .scaledTableBoard .playerBadge p {
+    font-size: 10px;
+  }
+
+  .scaledTableBoard .playerBadge .turnChip {
+    min-width: 34px;
+    min-height: 18px;
+    padding: 0 4px;
+    font-size: 9px;
+  }
+
+  .scaledTableBoard .meldRail {
+    max-width: 104px;
+  }
+
+  .scaledTableBoard .flowerRail {
+    max-width: 92px;
+  }
+
+  .scaledTableBoard .flowerRail .miniTile,
+  .scaledTableBoard .meldRail .miniTile {
+    width: 18px;
+    min-width: 18px;
+    height: 25px;
+  }
+
+  .scaledTableBoard .meldRail .tileBacks span {
+    width: 18px;
+    height: 25px;
+  }
+
+  .scaledTableBoard .centerConsole {
+    width: 112px;
+    min-height: 0;
+    aspect-ratio: 1;
+    padding: 10px 7px 7px;
+  }
+
+  .scaledTableBoard .centerWallCount strong {
+    font-size: 21px;
+  }
+
+  .scaledTableBoard .lastDiscardTileSlot {
+    width: 28px;
+    height: 36px;
+  }
+
+  .scaledTableBoard .lastDiscardLabel {
+    min-height: 16px;
+    font-size: 9px;
+    line-height: 16px;
+  }
+}
+
+@media (max-height: 540px) and (orientation: landscape) {
+  .gameAppShell {
+    padding:
+      max(4px, env(safe-area-inset-top, 0px))
+      max(6px, env(safe-area-inset-right, 0px))
+      calc(4px + env(safe-area-inset-bottom, 0px))
+      max(6px, env(safe-area-inset-left, 0px));
+  }
+
+  .gameExperience {
+    min-height: calc(100dvh - 8px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    gap: 4px;
+  }
+
+  .gameHeader {
+    min-height: 42px;
+    padding: 4px 6px;
+  }
+
+  .brandTile.compact {
+    width: 28px;
+    height: 36px;
+    font-size: 18px;
+  }
+
+  .gameTitle {
+    gap: 6px;
+  }
+
+  .gameTitle h1 {
+    font-size: 15px;
+  }
+
+  .gameTitle p {
+    display: none;
+  }
+
+  .iconButton {
+    width: 34px;
+    min-height: 34px;
+  }
+
+  .activeGameScene .boardStack {
+    grid-template-rows: minmax(clamp(190px, calc(100dvh - 188px), 300px), 1fr) auto auto;
+    gap: 4px;
+  }
+
+  .activeGameScene .gameBoard {
+    min-height: clamp(190px, calc(100dvh - 188px), 300px);
+  }
+
+  .activeGameScene .boardStack:has(.actionDock) {
+    grid-template-rows: minmax(190px, clamp(190px, calc(100dvh - 188px), 300px)) auto auto;
+  }
+
+  .actionDock {
+    min-height: 38px;
+    gap: 4px;
+  }
+
+  .actionButton {
+    min-width: 44px;
+    min-height: 34px;
+    padding: 0 8px;
+    font-size: 14px;
+  }
+
+  .actionButton.withPreview {
+    min-height: 42px;
+    padding: 3px 6px;
+  }
+
+  .actionTilePreview .miniTile {
+    width: 15px;
+    min-width: 15px;
+    height: 21px;
+  }
+
+  .handDock {
+    min-height: 64px;
+    grid-template-columns: 34px minmax(0, 1fr);
+    gap: 5px;
+    padding: 5px 6px calc(5px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .handStatus {
+    min-height: 48px;
+    font-size: 11px;
+  }
+
+  .handTiles {
+    padding: 4px 2px 3px;
+    gap: 3px;
+  }
+
+  .tileButton {
+    flex-basis: 30px;
+    width: 30px;
+    height: 47px;
+    border-radius: 5px;
+  }
+
+  .tileButton.drawn {
+    margin-left: 5px;
+  }
+
+  .scaledTableBoard {
+    --table-edge: 4px;
+    --table-badge-width: 96px;
+    --table-corner-row-offset: 40px;
+    --table-flower-x: calc(var(--table-edge) + var(--table-badge-width) + 6px);
+    --table-flower-y: var(--table-edge);
+    --table-side-spot: 58px;
+    --table-horizontal-spot-width: min(360px, 62%);
+    --table-top-spot-y: 42px;
+    --table-bottom-spot-y: 42px;
+  }
+
+  .scaledTableBoard .wallRail {
+    display: none;
+  }
+
+  .scaledTableBoard .playerBadge {
+    min-height: 34px;
+    grid-template-columns: 24px minmax(0, 1fr);
+    gap: 4px;
+    padding: 4px;
+  }
+
+  .scaledTableBoard .playerBadge .avatar {
+    width: 23px;
+    height: 23px;
+  }
+
+  .scaledTableBoard .playerBadge strong {
+    font-size: 10px;
+  }
+
+  .scaledTableBoard .playerBadge p {
+    display: none;
+  }
+
+  .scaledTableBoard .playerBadge .turnChip {
+    grid-column: auto;
+    justify-self: end;
+    min-width: 28px;
+    min-height: 16px;
+    margin-top: 0;
+    padding: 0 4px;
+    font-size: 9px;
+  }
+
+  .scaledTableBoard .badge1 .playerBadge,
+  .scaledTableBoard .badge3 .playerBadge {
+    grid-template-columns: 24px;
+  }
+
+  .scaledTableBoard .meldRail {
+    max-width: 108px;
+    gap: 2px;
+    padding: 2px;
+  }
+
+  .scaledTableBoard .flowerRail {
+    max-width: 86px;
+    gap: 2px;
+    padding: 2px;
+  }
+
+  .scaledTableBoard .flowerRail .miniTile,
+  .scaledTableBoard .meldRail .miniTile {
+    width: 17px;
+    min-width: 17px;
+    height: 24px;
+  }
+
+  .scaledTableBoard .meldRail .tileBacks span {
+    width: 17px;
+    height: 24px;
+  }
+
+  .scaledTableBoard .spot1,
+  .scaledTableBoard .spot3 {
+    width: 48px;
+  }
+
+  .scaledTableBoard .revealedHandRail .miniTile {
+    width: 17px;
+    min-width: 17px;
+    height: 24px;
+  }
+
+  .scaledTableBoard .revealedHandRail.side {
+    grid-template-columns: repeat(2, 18px);
+  }
+
+  .scaledTableBoard .river0 {
+    bottom: 17%;
+    max-width: 150px;
+  }
+
+  .scaledTableBoard .river2 {
+    top: 17%;
+    max-width: 150px;
+  }
+
+  .scaledTableBoard .river1 {
+    right: 25%;
+    width: 156px;
+  }
+
+  .scaledTableBoard .river3 {
+    left: 25%;
+    width: 156px;
+  }
+
+  .scaledTableBoard .riverLane .miniTile {
+    width: 18px;
+    min-width: 18px;
+    height: 25px;
+  }
+
+  .scaledTableBoard .centerConsole {
+    top: 52%;
+    width: 96px;
+    min-height: 0;
+    aspect-ratio: 1;
+    padding: 6px;
+    gap: 3px;
+  }
+
+  .scaledTableBoard .centerWallCount strong {
+    font-size: 18px;
+  }
+
+  .scaledTableBoard .centerWallCount span,
+  .scaledTableBoard .lastDiscardLabel {
+    font-size: 9px;
+  }
+
+  .scaledTableBoard .lastDiscardTileSlot {
+    width: 24px;
+    height: 32px;
+  }
+
+  .scaledTableBoard .lastDiscard .miniTile {
+    width: 22px;
+    min-width: 22px;
+    height: 31px;
+  }
+
+  .scaledTableBoard .windMarker {
+    width: 25px;
+    height: 22px;
+    font-size: 10px;
+  }
+
+  .scaledTableBoard .markerTop {
+    top: -12px;
+  }
+
+  .scaledTableBoard .markerRight {
+    right: -12px;
+  }
+
+  .scaledTableBoard .markerBottom {
+    bottom: -12px;
+  }
+
+  .scaledTableBoard .markerLeft {
+    left: -12px;
+  }
+
+  .scaledTableBoard .centerPoints strong {
+    font-size: 15px;
+  }
+
+  .scaledTableBoard .turnCountdown {
+    min-width: 84px;
+    min-height: 30px;
+    padding: 3px 4px;
+  }
+
+  .scaledTableBoard .timerRing {
+    width: 24px;
+    height: 24px;
   }
 }
