@@ -1,4 +1,4 @@
-import { BookOpen, Copy, DoorOpen, Loader2, Pencil, Play, Save, Send, Shuffle, WifiOff, X } from "lucide-react";
+import { BookOpen, Copy, DoorOpen, Eye, Loader2, Pencil, Play, Save, Send, Shuffle, WifiOff, X } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 import {
@@ -22,8 +22,8 @@ import { RoomLobby } from "./components/RoomLobby";
 import { defaultRoomConfig, RoomSettingsPanel } from "./components/RoomSettingsPanel";
 import { SettlementOverlay } from "./components/SettlementOverlay";
 import { TableScreen } from "./components/TableScreen";
-import { AuthExpiredError, api, clearSession, readSession, requestGuestSession, saveSession, updateGuestSessionName } from "./api";
-import { modeLabels, windFullLabels } from "./constants";
+import { ApiError, AuthExpiredError, api, clearSession, readSession, requestGuestSession, saveSession, updateGuestSessionName } from "./api";
+import { modeLabels, windFullLabels, windLabels } from "./constants";
 import {
   drawMusicTracks,
   lobbyMusicTracks,
@@ -53,6 +53,8 @@ export function App() {
   const [actions, setActions] = useState<LegalAction[]>([]);
   const [settlement, setSettlement] = useState<ScoringResult | null>(null);
   const [socket, setSocket] = useState<MahjongSocket | null>(null);
+  const [isSpectator, setIsSpectator] = useState(false);
+  const [spectatorViewSeatIndex, setSpectatorViewSeatIndex] = useState(0);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [renamingName, setRenamingName] = useState(false);
@@ -71,9 +73,10 @@ export function App() {
     return room.seats.find((seat) => seat.playerId === session.playerId);
   }, [room, session]);
 
-  const myTurn = game?.phase === "playing" && game.currentSeat === mySeat?.seatIndex;
-  const claimActions = actions.filter((action) => ["win", "chow", "pong", "kong", "pass"].includes(action.type));
-  const commandActions = actions.filter((action) => ["win", "kong", "declareTing", "declareRiichi"].includes(action.type));
+  const myTurn = !isSpectator && game?.phase === "playing" && game.currentSeat === mySeat?.seatIndex;
+  const playerActions = isSpectator ? [] : actions;
+  const claimActions = playerActions.filter((action) => ["win", "chow", "pong", "kong", "pass"].includes(action.type));
+  const commandActions = playerActions.filter((action) => ["win", "kong", "declareTing", "declareRiichi"].includes(action.type));
   const visibleActions = claimActions.length > 0 ? claimActions : commandActions;
   const handSignature = privateState?.hand.map((tile) => tile.id).join("|") ?? "";
   const settlementResult = settlement ?? game?.settlement ?? null;
@@ -81,23 +84,25 @@ export function App() {
   const serverNow = clockMs + clockOffsetMs;
   const activeGame = Boolean(game && game.phase !== "waiting" && game.phase !== "settled" && game.phase !== "draw");
   const selfPlayer = mySeat ? game?.players.find((player) => player.seatIndex === mySeat.seatIndex) : undefined;
-  const showHandTingHint = Boolean(selfPlayer?.declaredTing || selfPlayer?.declaredRiichi);
+  const showHandTingHint = !isSpectator && Boolean(selfPlayer?.declaredTing || selfPlayer?.declaredRiichi);
   const hasTingPlayer = Boolean(game?.players.some((player) => player.declaredTing || player.declaredRiichi));
+  const tablePerspectiveSeatIndex = isSpectator ? spectatorViewSeatIndex : mySeat?.seatIndex;
   const canManageSeats = Boolean(
     room &&
       session &&
+      !isSpectator &&
       room.hostPlayerId === session.playerId &&
       !room.seatDraw &&
       (!game || game.phase === "settled" || game.phase === "draw" || game.phase === "waiting")
   );
 
   const discardableIds = useMemo(
-    () => new Set(actions.filter((action) => action.type === "discard").map((action) => action.tileId).filter(Boolean) as string[]),
-    [actions]
+    () => new Set(playerActions.filter((action) => action.type === "discard").map((action) => action.tileId).filter(Boolean) as string[]),
+    [playerActions]
   );
   const actionHintIds = useMemo(
-    () => buildActionHintIds(actions, privateState?.hand ?? [], game?.claimWindow?.discard, privateState?.drawnTileId),
-    [actions, game?.claimWindow?.discard, privateState?.drawnTileId, privateState?.hand]
+    () => buildActionHintIds(playerActions, privateState?.hand ?? [], game?.claimWindow?.discard, privateState?.drawnTileId),
+    [playerActions, game?.claimWindow?.discard, privateState?.drawnTileId, privateState?.hand]
   );
   const activeMusicTrack = useMemo(() => {
     const trackSeed = game?.handId ?? room?.code ?? "music";
@@ -205,6 +210,7 @@ export function App() {
       setPrivateState(null);
       setActions([]);
       setSettlement(null);
+      setIsSpectator(false);
       setSocket((current) => {
         current?.disconnect();
         return null;
@@ -242,7 +248,8 @@ export function App() {
     const nextSocket: MahjongSocket = io("/", {
       auth: {
         token: session.token,
-        roomCode: room.code
+        roomCode: room.code,
+        spectator: isSpectator
       }
     });
 
@@ -257,8 +264,23 @@ export function App() {
       setGame(state);
       setSettlement(state.settlement ?? null);
     });
-    nextSocket.on("game.privateState", setPrivateState);
-    nextSocket.on("game.actionRequired", setActions);
+    nextSocket.on("connection.recovered", (payload) => {
+      if (payload.role === "spectator") {
+        setIsSpectator(true);
+        setPrivateState(null);
+        setActions([]);
+      }
+    });
+    nextSocket.on("game.privateState", (state) => {
+      if (!isSpectator) {
+        setPrivateState(state);
+      }
+    });
+    nextSocket.on("game.actionRequired", (nextActions) => {
+      if (!isSpectator) {
+        setActions(nextActions);
+      }
+    });
     nextSocket.on("game.settlement", setSettlement);
     nextSocket.on("game.error", (payload) => setError(payload.message));
     nextSocket.on("connect_error", (socketError) => {
@@ -273,7 +295,7 @@ export function App() {
     return () => {
       nextSocket.disconnect();
     };
-  }, [applyServerTime, handleAuthExpired, room?.code, session?.token]);
+  }, [applyServerTime, handleAuthExpired, isSpectator, room?.code, session?.token]);
 
   const authenticate = useCallback(async () => {
     setBusy(true);
@@ -299,6 +321,10 @@ export function App() {
         })
       );
       applyServerTime(snapshot.serverTime);
+      setIsSpectator(false);
+      setSpectatorViewSeatIndex(0);
+      setPrivateState(null);
+      setActions([]);
       setRoom(snapshot);
       setJoinCode(snapshot.code);
     } catch (caught) {
@@ -316,19 +342,46 @@ export function App() {
     if (!session || !joinCode.trim()) return;
     setBusy(true);
     setError("");
+    const roomCode = joinCode.trim().toUpperCase();
     try {
-      const roomCode = joinCode.trim().toUpperCase();
       const snapshot = await runWithFreshSession((activeSession) =>
         api<RoomSnapshot>(`/api/rooms/${roomCode}/join`, activeSession.token, {
           method: "POST"
         })
       );
       applyServerTime(snapshot.serverTime);
+      setIsSpectator(false);
+      setSpectatorViewSeatIndex(0);
+      setPrivateState(null);
+      setActions([]);
       setRoom(snapshot);
     } catch (caught) {
       if (caught instanceof AuthExpiredError) {
         handleAuthExpired();
         return;
+      }
+      if (caught instanceof ApiError && caught.code === "ROOM_FULL") {
+        try {
+          const snapshot = await runWithFreshSession((activeSession) =>
+            api<RoomSnapshot>(`/api/rooms/${roomCode}`, activeSession.token, {
+              method: "GET"
+            })
+          );
+          applyServerTime(snapshot.serverTime);
+          setIsSpectator(true);
+          setSpectatorViewSeatIndex(0);
+          setPrivateState(null);
+          setActions([]);
+          setRoom(snapshot);
+          return;
+        } catch (fallbackError) {
+          if (fallbackError instanceof AuthExpiredError) {
+            handleAuthExpired();
+            return;
+          }
+          setError(fallbackError instanceof Error ? fallbackError.message : "觀戰房間失敗。");
+          return;
+        }
       }
       setError(caught instanceof Error ? caught.message : "加入房間失敗。");
     } finally {
@@ -422,6 +475,8 @@ export function App() {
     setPrivateState(null);
     setActions([]);
     setSettlement(null);
+    setIsSpectator(false);
+    setSpectatorViewSeatIndex(0);
   }, [socket]);
 
   const addBot = useCallback(
@@ -614,6 +669,7 @@ export function App() {
                 <h1>{modeLabels[room.mode]} 麻將</h1>
                 <p>
                   房號 <strong>{room.code}</strong>
+                  {isSpectator ? " · 觀戰中" : ""}
                   {game ? ` · ${phaseLabel(game.phase)} · ${windFullLabels[game.roundWind]}` : " · 等待入桌"}
                 </p>
               </div>
@@ -638,24 +694,31 @@ export function App() {
                 <TableScreen
                   room={room}
                   game={game}
-                  mySeatIndex={mySeat?.seatIndex}
-                  privateMelds={privateState?.privateMelds ?? []}
+                  perspectiveSeatIndex={tablePerspectiveSeatIndex}
+                  ownSeatIndex={isSpectator ? undefined : mySeat?.seatIndex}
+                  privateMelds={isSpectator ? [] : privateState?.privateMelds ?? []}
                   myTurn={Boolean(myTurn)}
                   serverNow={serverNow}
                   latencyMs={latencyMs}
                 />
-                <ActionDock actions={visibleActions} hand={privateState?.hand ?? []} claimDiscard={game?.claimWindow?.discard} onAction={triggerAction} />
-                <Hand
-                  tiles={privateState?.hand ?? []}
-                  winningTiles={privateState?.winningTiles ?? []}
-                  showTingHint={showHandTingHint}
-                  discardableIds={discardableIds}
-                  selectedTileId={selectedTileId}
-                  drawnTileId={privateState?.drawnTileId}
-                  actionHintIds={actionHintIds}
-                  onTileClick={discard}
-                  myTurn={Boolean(myTurn)}
-                />
+                {isSpectator ? (
+                  <SpectatorControls game={game!} viewSeatIndex={spectatorViewSeatIndex} onChange={setSpectatorViewSeatIndex} />
+                ) : (
+                  <>
+                    <ActionDock actions={visibleActions} hand={privateState?.hand ?? []} claimDiscard={game?.claimWindow?.discard} onAction={triggerAction} />
+                    <Hand
+                      tiles={privateState?.hand ?? []}
+                      winningTiles={privateState?.winningTiles ?? []}
+                      showTingHint={showHandTingHint}
+                      discardableIds={discardableIds}
+                      selectedTileId={selectedTileId}
+                      drawnTileId={privateState?.drawnTileId}
+                      actionHintIds={actionHintIds}
+                      onTileClick={discard}
+                      myTurn={Boolean(myTurn)}
+                    />
+                  </>
+                )}
               </div>
             </div>
           ) : (
@@ -663,7 +726,8 @@ export function App() {
               room={room}
               game={game}
               myPlayerId={session.playerId}
-              mySeatIndex={mySeat?.seatIndex}
+              mySeatIndex={isSpectator ? undefined : mySeat?.seatIndex}
+              isSpectator={isSpectator}
               canManageSeats={canManageSeats}
               mySeatReady={mySeat?.ready}
               onReady={toggleReady}
@@ -679,8 +743,9 @@ export function App() {
             <SettlementOverlay
               result={settlementResult}
               game={game}
-              privateState={privateState}
+              privateState={isSpectator ? null : privateState}
               mySeatReady={mySeat?.ready}
+              canReady={!isSpectator}
               onReady={toggleReady}
               onClose={() => setDismissedSettlementHandId(settlementResult.handId)}
             />
@@ -693,6 +758,45 @@ export function App() {
         </section>
       )}
     </main>
+  );
+}
+
+function SpectatorControls({
+  game,
+  viewSeatIndex,
+  onChange
+}: {
+  game: GameState;
+  viewSeatIndex: number;
+  onChange: (seatIndex: number) => void;
+}) {
+  const viewOptions = game.players.map((player) => ({
+    seatIndex: player.seatIndex,
+    label: windLabels[player.wind],
+    name: player.name ?? `玩家 ${player.seatIndex + 1}`
+  }));
+
+  return (
+    <div className="spectatorDock" aria-label="觀戰視角">
+      <div className="spectatorStatus">
+        <Eye size={18} />
+        <strong>觀戰中</strong>
+        <span>公開資訊</span>
+      </div>
+      <div className="spectatorPerspective" role="group" aria-label="切換觀戰視角">
+        {viewOptions.map((option) => (
+          <button
+            key={option.seatIndex}
+            className={option.seatIndex === viewSeatIndex ? "active" : ""}
+            type="button"
+            onClick={() => onChange(option.seatIndex)}
+            title={`${option.label}家視角：${option.name}`}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 

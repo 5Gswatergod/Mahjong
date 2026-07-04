@@ -2075,6 +2075,57 @@ input {
   gap: 8px;
 }
 
+.spectatorDock {
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 10px;
+  color: #f9edc8;
+}
+
+.spectatorStatus,
+.spectatorLobbyState {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 14px;
+  color: #f9edc8;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 232, 178, 0.22);
+  border-radius: 8px;
+  font-weight: 900;
+}
+
+.spectatorStatus span {
+  color: #c9c9d5;
+  font-size: 12px;
+}
+
+.spectatorPerspective {
+  display: inline-grid;
+  grid-template-columns: repeat(4, 42px);
+  gap: 6px;
+}
+
+.spectatorPerspective button {
+  min-height: 42px;
+  color: #f4d887;
+  background: rgba(7, 10, 18, 0.58);
+  border: 1px solid rgba(255, 232, 178, 0.22);
+  border-radius: 8px;
+  font-weight: 900;
+}
+
+.spectatorPerspective button.active {
+  color: #17332e;
+  background: linear-gradient(180deg, #f3de9b, #d4a647);
+  box-shadow: 0 4px 0 #85652b;
+}
+
 .actionButton {
   min-width: 58px;
   min-height: 46px;
@@ -3338,6 +3389,16 @@ input {
   .settingsGrid,
   .lobbyReadyBar {
     grid-template-columns: 1fr;
+  }
+
+  .spectatorDock {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .spectatorStatus,
+  .spectatorLobbyState {
+    min-width: 132px;
   }
 
   .gameHeaderActions {

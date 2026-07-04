@@ -1,5 +1,5 @@
 import { type ReactNode } from "react";
-import { Check, Clock, Sparkles } from "lucide-react";
+import { Check, Clock, Eye, Sparkles } from "lucide-react";
 import type { GameState, RoomSnapshot } from "@taiwan-mahjong/shared";
 import { modeLabels, windLabels } from "../constants";
 import { formatPoints, phaseLabel } from "../utils/labels";
@@ -12,6 +12,7 @@ export function RoomLobby({
   game,
   myPlayerId,
   mySeatIndex,
+  isSpectator,
   canManageSeats,
   mySeatReady,
   onReady,
@@ -25,6 +26,7 @@ export function RoomLobby({
   game: GameState | null;
   myPlayerId: string;
   mySeatIndex: number | undefined;
+  isSpectator: boolean;
   canManageSeats: boolean;
   mySeatReady: boolean | undefined;
   onReady: () => void;
@@ -36,7 +38,7 @@ export function RoomLobby({
 }) {
   const occupiedSeats = room.seats.filter((seat) => seat.playerId).length;
   const isDrawingSeats = Boolean(room.seatDraw);
-  const canReady = !isDrawingSeats && (!game || game.phase === "settled" || game.phase === "draw");
+  const canReady = !isSpectator && !isDrawingSeats && (!game || game.phase === "settled" || game.phase === "draw");
   const readyText = isDrawingSeats ? "抓位中" : mySeatReady ? "取消準備" : game?.phase === "settled" || game?.phase === "draw" ? "準備下一局" : "準備入桌";
 
   return (
@@ -58,7 +60,8 @@ export function RoomLobby({
         <TableScreen
           room={room}
           game={null}
-          mySeatIndex={mySeatIndex}
+          perspectiveSeatIndex={mySeatIndex}
+          ownSeatIndex={mySeatIndex}
           privateMelds={[]}
           myTurn={false}
           serverNow={serverNow}
@@ -66,13 +69,28 @@ export function RoomLobby({
         />
         {room.seatDraw ? <SeatDrawCeremony room={room} serverNow={serverNow} /> : null}
         <div className="lobbyReadyBar">
-          <button className={mySeatReady ? "readyButton ready" : "readyButton"} onClick={onReady} disabled={!canReady}>
-            <Check size={18} />
-            {readyText}
-          </button>
+          {isSpectator ? (
+            <div className="spectatorLobbyState">
+              <Eye size={18} />
+              <strong>觀戰中</strong>
+            </div>
+          ) : (
+            <button className={mySeatReady ? "readyButton ready" : "readyButton"} onClick={onReady} disabled={!canReady}>
+              <Check size={18} />
+              {readyText}
+            </button>
+          )}
           <div className="lobbyReadyCopy">
             <strong>{occupiedSeats}/4</strong>
-            <span>{isDrawingSeats ? "正在依序抓風牌決定東南西北座位" : occupiedSeats === 4 ? "全員入桌後按準備即可開局" : "等待玩家加入或由房主補 AI"}</span>
+            <span>
+              {isSpectator
+                ? "公開資訊觀戰"
+                : isDrawingSeats
+                  ? "正在依序抓風牌決定東南西北座位"
+                  : occupiedSeats === 4
+                    ? "全員入桌後按準備即可開局"
+                    : "等待玩家加入或由房主補 AI"}
+            </span>
           </div>
         </div>
       </div>

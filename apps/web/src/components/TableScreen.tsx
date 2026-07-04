@@ -11,7 +11,8 @@ const tableStageHeight = 560;
 export function TableScreen({
   room,
   game,
-  mySeatIndex,
+  perspectiveSeatIndex,
+  ownSeatIndex,
   privateMelds,
   myTurn,
   serverNow,
@@ -19,7 +20,8 @@ export function TableScreen({
 }: {
   room: RoomSnapshot;
   game: GameState | null;
-  mySeatIndex: number | undefined;
+  perspectiveSeatIndex: number | undefined;
+  ownSeatIndex: number | undefined;
   privateMelds: Meld[];
   myTurn: boolean;
   serverNow: number;
@@ -48,10 +50,13 @@ export function TableScreen({
   }
 
   const orderedSeats = game.players
-    .map((player) => ({ player, distance: mySeatIndex === undefined ? player.seatIndex : (player.seatIndex - mySeatIndex + 4) % 4 }))
+    .map((player) => ({
+      player,
+      distance: perspectiveSeatIndex === undefined ? player.seatIndex : (player.seatIndex - perspectiveSeatIndex + 4) % 4
+    }))
     .sort((left, right) => left.distance - right.distance);
-  const selfPlayer = mySeatIndex === undefined ? undefined : game.players.find((player) => player.seatIndex === mySeatIndex);
   const currentPlayer = game.players.find((player) => player.seatIndex === game.currentSeat);
+  const bottomPlayer = orderedSeats.find(({ distance }) => distance === 0)?.player;
   const liveWallCount = Math.max(0, game.wallCount - game.deadWallCount);
   const rightPlayer = orderedSeats.find(({ distance }) => distance === 1)?.player;
   const topPlayer = orderedSeats.find(({ distance }) => distance === 2)?.player;
@@ -82,8 +87,8 @@ export function TableScreen({
           player={player}
           distance={distance}
           active={game.currentSeat === player.seatIndex}
-          isSelf={player.seatIndex === mySeatIndex}
-          privateMelds={player.seatIndex === mySeatIndex ? privateMelds : undefined}
+          isSelf={player.seatIndex === ownSeatIndex}
+          privateMelds={player.seatIndex === ownSeatIndex ? privateMelds : undefined}
         />
       ))}
 
@@ -94,7 +99,7 @@ export function TableScreen({
       <div className="centerConsole">
         <span className="windMarker markerTop">{windLabels[topPlayer?.wind ?? "north"]}</span>
         <span className="windMarker markerRight">{windLabels[rightPlayer?.wind ?? "east"]}</span>
-        <span className="windMarker markerBottom">{windLabels[selfPlayer?.wind ?? "south"]}</span>
+        <span className="windMarker markerBottom">{windLabels[bottomPlayer?.wind ?? "south"]}</span>
         <span className="windMarker markerLeft">{windLabels[leftPlayer?.wind ?? "west"]}</span>
         <div className="roundDial">
           <span>{modeLabels[game.mode]}</span>
@@ -104,7 +109,7 @@ export function TableScreen({
           <span className="wide">{game.mode === "riichi" ? `${game.riichi?.honba ?? game.dealerStreak} 本場` : `${game.dealerStreak} 連莊`}</span>
         </div>
         <div className="centerPoints">
-          <strong>{formatPoints(selfPlayer?.coins ?? 0)}</strong>
+          <strong>{formatPoints(bottomPlayer?.coins ?? 0)}</strong>
           <span>{phaseLabel(game.phase)}</span>
         </div>
         <TurnCountdown game={game} serverNow={serverNow} latencyMs={latencyMs} />

@@ -36,6 +36,7 @@ import {
   type SeatDrawResult,
   type ServerToClientEvents,
   type SocketData,
+  type SocketRole,
   type Tile,
   winds
 } from "@taiwan-mahjong/shared";
@@ -53,7 +54,8 @@ declare module "@taiwan-mahjong/shared" {
   interface SocketData {
     playerId: string;
     roomCode: string;
-    seatIndex: number;
+    role: SocketRole;
+    seatIndex?: number;
   }
 }
 
@@ -93,6 +95,7 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents, InterServerEve
     credentials: true
   }
 });
+type MahjongSocket = Parameters<Parameters<typeof io.on>[1]>[0];
 
 const sessions = new Map<string, GuestSession>();
 const rooms = new Map<string, Room>();
@@ -210,6 +213,11 @@ fastify.post("/api/rooms/:code/join", async (request, reply) => {
   if (!room) {
     return reply.code(404).send({ message: "Room not found." });
   }
+  const existing = room.seats.find((seat) => seat.playerId === session.playerId);
+  const full = room.seats.every((seat) => seat.playerId);
+  if (!existing && full) {
+    return reply.code(409).send({ code: "ROOM_FULL", message: "Room is full." });
+  }
 
   joinRoom(room, session);
   await persist(room.code, "room.joined", { playerId: session.playerId });
@@ -249,10 +257,18 @@ if (existsSync(path.join(staticDir, "index.html"))) {
 io.use((socket, next) => {
   const token = typeof socket.handshake.auth.token === "string" ? socket.handshake.auth.token : "";
   const roomCode = typeof socket.handshake.auth.roomCode === "string" ? socket.handshake.auth.roomCode.toUpperCase() : "";
+  const spectator = socket.handshake.auth.spectator === true;
   const session = sessions.get(token);
   const room = rooms.get(roomCode);
   if (!session || !room) {
     next(new Error("Invalid socket auth."));
+    return;
+  }
+  socket.data.playerId = session.playerId;
+  socket.data.roomCode = room.code;
+  if (spectator) {
+    socket.data.role = "spectator";
+    next();
     return;
   }
   const seat = room.seats.find((candidate) => candidate.playerId === session.playerId);
@@ -260,8 +276,7 @@ io.use((socket, next) => {
     next(new Error("Player is not seated in this room."));
     return;
   }
-  socket.data.playerId = session.playerId;
-  socket.data.roomCode = room.code;
+  socket.data.role = "player";
   socket.data.seatIndex = seat.seatIndex;
   next();
 });
@@ -274,14 +289,21 @@ io.on("connection", (socket) => {
   }
 
   socket.join(room.code);
-  clearDisconnectTimer(room, socket.data.playerId);
-  setConnected(room, socket.data.playerId, true);
-  socket.emit("connection.recovered", { roomCode: room.code, seatIndex: socket.data.seatIndex });
-  emitFullState(room, socket.data.seatIndex, socket.id);
-  broadcastRoom(room);
+  if (socket.data.role === "player") {
+    const seatIndex = requirePlayerSeatIndex(socket);
+    clearDisconnectTimer(room, socket.data.playerId);
+    setConnected(room, socket.data.playerId, true);
+    socket.emit("connection.recovered", { role: "player", roomCode: room.code, seatIndex });
+    emitFullState(room, socket.id);
+    broadcastRoom(room);
+  } else {
+    socket.emit("connection.recovered", { role: "spectator", roomCode: room.code });
+    emitFullState(room, socket.id);
+  }
 
   socket.on("room.ready", async ({ ready }) => {
     await handleSocketAction(socket, async () => {
+      requirePlayerSeatIndex(socket);
       const currentRoom = requireRoom(socket.data.roomCode);
       if (currentRoom.seatDraw) {
         throw new Error("正在抓位，請稍候。");
@@ -298,6 +320,7 @@ io.on("connection", (socket) => {
 
   socket.on("room.addBot", async ({ seatIndex }) => {
     await handleSocketAction(socket, async () => {
+      requirePlayerSeatIndex(socket);
       const currentRoom = requireRoom(socket.data.roomCode);
       addBotToRoom(currentRoom, socket.data.playerId, seatIndex);
       await persist(currentRoom.code, "room.botAdded", { seatIndex });
@@ -309,6 +332,7 @@ io.on("connection", (socket) => {
 
   socket.on("room.clearSeat", async ({ seatIndex }) => {
     await handleSocketAction(socket, async () => {
+      requirePlayerSeatIndex(socket);
       const currentRoom = requireRoom(socket.data.roomCode);
       const clearedPlayerId = currentRoom.seats[seatIndex]?.playerId;
       clearSeatInRoom(currentRoom, socket.data.playerId, seatIndex);
@@ -323,11 +347,16 @@ io.on("connection", (socket) => {
   socket.on("room.leave", async () => {
     await handleSocketAction(socket, async () => {
       const currentRoom = requireRoom(socket.data.roomCode);
+      if (socket.data.role === "spectator") {
+        socket.leave(currentRoom.code);
+        return;
+      }
+      const seatIndex = requirePlayerSeatIndex(socket);
       const seat = requireSeat(currentRoom, socket.data.playerId);
       seat.ready = false;
       seat.connected = false;
       if (currentRoom.game) {
-        currentRoom.game.players[seat.seatIndex]!.connected = false;
+        currentRoom.game.players[seatIndex]!.connected = false;
       }
       await persist(currentRoom.code, "room.left", { playerId: socket.data.playerId });
       broadcastRoom(currentRoom);
@@ -338,7 +367,7 @@ io.on("connection", (socket) => {
   socket.on("game.discard", async ({ tileId }) => {
     await handleGameAction(socket, "game.discard", () => {
       const currentRoom = requireRoom(socket.data.roomCode);
-      applyDiscard(requireGame(currentRoom), socket.data.seatIndex, tileId);
+      applyDiscard(requireGame(currentRoom), requirePlayerSeatIndex(socket), tileId);
       afterGameMutation(currentRoom);
     });
   });
@@ -347,10 +376,11 @@ io.on("connection", (socket) => {
     await handleGameAction(socket, "game.claim", () => {
       const currentRoom = requireRoom(socket.data.roomCode);
       const currentGame = requireGame(currentRoom);
+      const seatIndex = requirePlayerSeatIndex(socket);
       if (type === "win" && currentGame.phase === "playing") {
-        applySelfDrawWin(currentGame, socket.data.seatIndex);
+        applySelfDrawWin(currentGame, seatIndex);
       } else {
-        applyClaim(currentGame, socket.data.seatIndex, type, tileIds ?? []);
+        applyClaim(currentGame, seatIndex, type, tileIds ?? []);
       }
       afterGameMutation(currentRoom);
     });
@@ -359,7 +389,7 @@ io.on("connection", (socket) => {
   socket.on("game.kong", async ({ tileIds, meldId }) => {
     await handleGameAction(socket, "game.kong", () => {
       const currentRoom = requireRoom(socket.data.roomCode);
-      applyKong(requireGame(currentRoom), socket.data.seatIndex, tileIds, meldId);
+      applyKong(requireGame(currentRoom), requirePlayerSeatIndex(socket), tileIds, meldId);
       afterGameMutation(currentRoom);
     });
   });
@@ -367,7 +397,7 @@ io.on("connection", (socket) => {
   socket.on("game.declareTing", async () => {
     await handleGameAction(socket, "game.declareTing", () => {
       const currentRoom = requireRoom(socket.data.roomCode);
-      applyDeclareTing(requireGame(currentRoom), socket.data.seatIndex);
+      applyDeclareTing(requireGame(currentRoom), requirePlayerSeatIndex(socket));
       afterGameMutation(currentRoom);
     });
   });
@@ -375,13 +405,13 @@ io.on("connection", (socket) => {
   socket.on("game.declareRiichi", async () => {
     await handleGameAction(socket, "game.declareRiichi", () => {
       const currentRoom = requireRoom(socket.data.roomCode);
-      applyDeclareRiichi(requireGame(currentRoom), socket.data.seatIndex);
+      applyDeclareRiichi(requireGame(currentRoom), requirePlayerSeatIndex(socket));
       afterGameMutation(currentRoom);
     });
   });
 
   socket.on("game.resync", () => {
-    emitFullState(room, socket.data.seatIndex, socket.id);
+    emitFullState(room, socket.id);
   });
 
   socket.on("disconnect", () => {
@@ -389,6 +419,10 @@ io.on("connection", (socket) => {
     if (!currentRoom) {
       return;
     }
+    if (socket.data.role === "spectator") {
+      return;
+    }
+    const seatIndex = requirePlayerSeatIndex(socket);
     setConnected(currentRoom, socket.data.playerId, false);
     currentRoom.disconnectTimers.set(
       socket.data.playerId,
@@ -399,7 +433,7 @@ io.on("connection", (socket) => {
         }
         const seat = lateRoom.seats.find((candidate) => candidate.playerId === socket.data.playerId);
         if (!seat?.connected) {
-          autoDiscardIfNeeded(lateRoom.game, socket.data.seatIndex);
+          autoDiscardIfNeeded(lateRoom.game, seatIndex);
           afterGameMutation(lateRoom);
         }
       }, DEFAULT_GAME_CONFIG.disconnectGraceMs)
@@ -549,7 +583,7 @@ function clearSeatInRoom(room: Room, requesterPlayerId: string, seatIndex: numbe
 
 function detachPlayerSockets(room: Room, playerId: string, message: string): void {
   for (const client of io.sockets.sockets.values()) {
-    if (client.data.roomCode !== room.code || client.data.playerId !== playerId) {
+    if (client.data.roomCode !== room.code || client.data.role !== "player" || client.data.playerId !== playerId) {
       continue;
     }
     client.emit("game.error", { message });
@@ -641,7 +675,7 @@ function startHand(room: Room): void {
 
 function syncSocketSeatIndices(room: Room): void {
   for (const client of io.sockets.sockets.values()) {
-    if (client.data.roomCode !== room.code) {
+    if (client.data.roomCode !== room.code || client.data.role !== "player") {
       continue;
     }
     const seat = room.seats.find((candidate) => candidate.playerId === client.data.playerId);
@@ -691,7 +725,7 @@ function broadcastGame(room: Room): void {
       continue;
     }
     const sockets = [...io.sockets.sockets.values()].filter(
-      (socket) => socket.data.roomCode === room.code && socket.data.playerId === seat.playerId
+      (socket) => socket.data.roomCode === room.code && socket.data.role === "player" && socket.data.playerId === seat.playerId
     );
     for (const socket of sockets) {
       const privateState = getPrivateState(room.game, seat.seatIndex);
@@ -701,7 +735,7 @@ function broadcastGame(room: Room): void {
   }
 }
 
-function emitFullState(room: Room, seatIndex: number, socketId: string): void {
+function emitFullState(room: Room, socketId: string): void {
   const socket = io.sockets.sockets.get(socketId);
   if (!socket) {
     return;
@@ -709,9 +743,11 @@ function emitFullState(room: Room, seatIndex: number, socketId: string): void {
   socket.emit("room.snapshot", snapshotRoom(room));
   if (room.game) {
     socket.emit("game.publicState", toPublicGameState(room.game));
-    const privateState = getPrivateState(room.game, seatIndex);
-    socket.emit("game.privateState", privateState);
-    socket.emit("game.actionRequired", privateState.legalActions);
+    if (socket.data.role === "player") {
+      const privateState = getPrivateState(room.game, requirePlayerSeatIndex(socket));
+      socket.emit("game.privateState", privateState);
+      socket.emit("game.actionRequired", privateState.legalActions);
+    }
   }
 }
 
@@ -955,7 +991,14 @@ function clearDisconnectTimer(room: Room, playerId: string): void {
   }
 }
 
-async function handleSocketAction(socket: Parameters<Parameters<typeof io.on>[1]>[0], action: () => Promise<void>): Promise<void> {
+function requirePlayerSeatIndex(socket: MahjongSocket): number {
+  if (socket.data.role !== "player" || typeof socket.data.seatIndex !== "number") {
+    throw new Error("觀戰者不能操作牌局。");
+  }
+  return socket.data.seatIndex;
+}
+
+async function handleSocketAction(socket: MahjongSocket, action: () => Promise<void>): Promise<void> {
   try {
     await action();
   } catch (error) {
@@ -963,10 +1006,11 @@ async function handleSocketAction(socket: Parameters<Parameters<typeof io.on>[1]
   }
 }
 
-async function handleGameAction(socket: Parameters<Parameters<typeof io.on>[1]>[0], type: string, action: () => void): Promise<void> {
+async function handleGameAction(socket: MahjongSocket, type: string, action: () => void): Promise<void> {
   await handleSocketAction(socket, async () => {
+    const seatIndex = requirePlayerSeatIndex(socket);
     action();
-    await persist(socket.data.roomCode, type, { playerId: socket.data.playerId, seatIndex: socket.data.seatIndex });
+    await persist(socket.data.roomCode, type, { playerId: socket.data.playerId, seatIndex });
   });
 }
 

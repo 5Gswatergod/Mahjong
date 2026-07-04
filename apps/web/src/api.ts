@@ -9,6 +9,20 @@ export class AuthExpiredError extends Error {
   }
 }
 
+export class ApiError extends Error {
+  status: number;
+  code?: string;
+
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    if (code) {
+      this.code = code;
+    }
+  }
+}
+
 export async function api<T>(path: string, token: string, init: RequestInit): Promise<T> {
   const headers: Record<string, string> = {
     Authorization: `Bearer ${token}`
@@ -30,7 +44,7 @@ export async function api<T>(path: string, token: string, init: RequestInit): Pr
     if (response.status === 401) {
       throw new AuthExpiredError(message);
     }
-    throw new Error(message);
+    throw new ApiError(message, response.status, errorCode(payload));
   }
   return payload as T;
 }
@@ -72,6 +86,13 @@ function errorMessage(payload: unknown, fallback: string): string {
     return payload.message;
   }
   return fallback;
+}
+
+function errorCode(payload: unknown): string | undefined {
+  if (payload && typeof payload === "object" && "code" in payload && typeof payload.code === "string") {
+    return payload.code;
+  }
+  return undefined;
 }
 
 export function readSession(): GuestAuthResponse | null {

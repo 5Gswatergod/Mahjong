@@ -187,7 +187,17 @@ export function toPublicGameState(game: CoreGame): GameState {
     ...(game.lastDiscard
       ? { lastDiscard: { seatIndex: game.lastDiscard.seatIndex, tile: game.lastDiscard.tile } }
       : {}),
-    ...(game.claimWindow ? { claimWindow: game.claimWindow } : {}),
+    ...(game.claimWindow
+      ? {
+          claimWindow: {
+            id: game.claimWindow.id,
+            discard: game.claimWindow.discard,
+            fromSeat: game.claimWindow.fromSeat,
+            deadlineAt: game.claimWindow.deadlineAt,
+            passedSeatIndices: game.claimWindow.passedSeatIndices
+          }
+        }
+      : {}),
     players: game.players.map((player) => ({
       seatIndex: player.seatIndex,
       wind: player.wind,

@@ -608,6 +608,44 @@ describe("engine", () => {
     expect(privateState.hand.at(-1)?.id).toBe(drawnTile.id);
   });
 
+  it("keeps claim options private while publishing the claim deadline", () => {
+    const game = createGame(seats(), { random: () => 0.42 });
+    const discardTile = tile("dragon:red", 2);
+    game.currentSeat = 0;
+    game.players[0]!.hand = [discardTile];
+    game.players[1]!.hand = [
+      tile("dragon:red", 0),
+      tile("dragon:red", 1),
+      ...tiles([
+        "characters:1",
+        "characters:2",
+        "characters:3",
+        "dots:1",
+        "dots:2",
+        "dots:3",
+        "bamboo:1",
+        "bamboo:2",
+        "bamboo:3",
+        "wind:east",
+        "wind:east",
+        "dragon:green",
+        "dragon:green",
+        "wind:south"
+      ])
+    ];
+    game.players[2]!.hand = [];
+    game.players[3]!.hand = [];
+
+    applyDiscard(game, 0, discardTile.id);
+
+    const publicState = toPublicGameState(game);
+    expect(publicState.claimWindow?.discard.id).toBe(discardTile.id);
+    expect(publicState.claimWindow?.fromSeat).toBe(0);
+    expect(publicState.claimWindow && "options" in publicState.claimWindow).toBe(false);
+    expect(game.claimWindow?.options.find((option) => option.seatIndex === 1)?.actions.some((action) => action.type === "pong")).toBe(true);
+    expect(getPrivateState(game, 1).legalActions.some((action) => action.type === "pong")).toBe(true);
+  });
+
   it("does not allow a fake self draw immediately after claiming a pong", () => {
     const game = createGame(seats(), { random: () => 0.42 });
     const discardTile = tile("dragon:red", 2);

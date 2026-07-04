@@ -202,6 +202,14 @@ export interface ClaimWindow {
   passedSeatIndices: number[];
 }
 
+export interface PublicClaimWindow {
+  id: string;
+  discard: Tile;
+  fromSeat: number;
+  deadlineAt: number;
+  passedSeatIndices: number[];
+}
+
 export interface PublicPlayerState extends PlayerSeat {
   handCount: number;
   flowerTiles: Tile[];
@@ -245,7 +253,7 @@ export interface GameState {
     seatIndex: number;
     tile: Tile;
   };
-  claimWindow?: ClaimWindow;
+  claimWindow?: PublicClaimWindow;
   players: PublicPlayerState[];
   riichi?: RiichiRoundState;
   settlement?: ScoringResult;
@@ -272,6 +280,12 @@ export interface GuestAuthResponse {
   token: string;
 }
 
+export type SocketRole = "player" | "spectator";
+
+export type ConnectionRecoveredPayload =
+  | { role: "player"; roomCode: string; seatIndex: number }
+  | { role: "spectator"; roomCode: string };
+
 export type ClientToServerEvents = {
   "room.ready": (payload: { ready: boolean }) => void;
   "room.addBot": (payload: { seatIndex: number }) => void;
@@ -292,7 +306,7 @@ export type ServerToClientEvents = {
   "game.actionRequired": (actions: LegalAction[]) => void;
   "game.settlement": (result: ScoringResult) => void;
   "game.error": (error: { message: string }) => void;
-  "connection.recovered": (payload: { roomCode: string; seatIndex: number }) => void;
+  "connection.recovered": (payload: ConnectionRecoveredPayload) => void;
 };
 
 export const winds: Wind[] = ["east", "south", "west", "north"];

@@ -9,6 +9,7 @@ export function SettlementOverlay({
   game,
   privateState,
   mySeatReady,
+  canReady,
   onReady,
   onClose
 }: {
@@ -16,6 +17,7 @@ export function SettlementOverlay({
   game: GameState | null;
   privateState: PrivatePlayerState | null;
   mySeatReady: boolean | undefined;
+  canReady: boolean;
   onReady: () => void;
   onClose: () => void;
 }) {
@@ -125,10 +127,12 @@ export function SettlementOverlay({
           </div>
 
           <div className="settlementActions">
-            <button className={mySeatReady ? "readyButton ready" : "readyButton"} onClick={onReady}>
-              <Check size={18} />
-              {mySeatReady ? "已準備" : "下一局準備"}
-            </button>
+            {canReady ? (
+              <button className={mySeatReady ? "readyButton ready" : "readyButton"} onClick={onReady}>
+                <Check size={18} />
+                {mySeatReady ? "已準備" : "下一局準備"}
+              </button>
+            ) : null}
             <button className="secondaryButton" onClick={onClose}>
               確定
             </button>
