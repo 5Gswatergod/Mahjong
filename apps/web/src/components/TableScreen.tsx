@@ -1,12 +1,9 @@
-import { type CSSProperties, useLayoutEffect, useRef, useState } from "react";
+import { type CSSProperties } from "react";
 import { Bot, RefreshCw } from "lucide-react";
 import type { GameState, Meld, PublicPlayerState, RoomSnapshot } from "@taiwan-mahjong/shared";
 import { modeLabels, windLabels } from "../constants";
 import { activeDeadline, formatLatency, formatPoints, initials, phaseLabel } from "../utils/labels";
 import { MeldTiles, MiniTile, TileBacks } from "./Tiles";
-
-const tableStageWidth = 1280;
-const tableStageHeight = 560;
 
 export function TableScreen({
   room,
@@ -27,8 +24,6 @@ export function TableScreen({
   serverNow: number;
   latencyMs: number | null;
 }) {
-  const tableFit = useTableStageFit(Boolean(game));
-
   if (!game) {
     return (
       <div className="gameBoard tableEmptyBoard">
@@ -63,7 +58,7 @@ export function TableScreen({
   const leftPlayer = orderedSeats.find(({ distance }) => distance === 3)?.player;
 
   return (
-    <div ref={tableFit.boardRef} className={myTurn ? "gameBoard scaledTableBoard myTurn" : "gameBoard scaledTableBoard"} style={tableFit.style}>
+    <div className={myTurn ? "gameBoard scaledTableBoard myTurn" : "gameBoard scaledTableBoard"}>
       <div className="tableStage">
       <div className="tableFelt" aria-hidden="true">
         <span className="feltGuide guideTop" />
@@ -82,13 +77,36 @@ export function TableScreen({
       </div>
 
       {orderedSeats.map(({ player, distance }) => (
+        <PlayerBadgeCard
+          key={`badge-${player.seatIndex}`}
+          player={player}
+          distance={distance}
+          active={game.currentSeat === player.seatIndex}
+          isSelf={player.seatIndex === ownSeatIndex}
+        />
+      ))}
+
+      {orderedSeats.map(({ player, distance }) => (
+        <FlowerRail key={`flowers-${player.seatIndex}`} player={player} distance={distance} />
+      ))}
+
+      {orderedSeats.map(({ player, distance }) => (
+        <MeldRail
+          key={`melds-${player.seatIndex}`}
+          player={player}
+          distance={distance}
+          isSelf={player.seatIndex === ownSeatIndex}
+          privateMelds={player.seatIndex === ownSeatIndex ? privateMelds : undefined}
+        />
+      ))}
+
+      {orderedSeats.map(({ player, distance }) => (
         <PlayerSpot
           key={player.seatIndex}
           player={player}
           distance={distance}
           active={game.currentSeat === player.seatIndex}
           isSelf={player.seatIndex === ownSeatIndex}
-          privateMelds={player.seatIndex === ownSeatIndex ? privateMelds : undefined}
         />
       ))}
 
@@ -133,61 +151,19 @@ export function TableScreen({
   );
 }
 
-function useTableStageFit(enabled: boolean) {
-  const boardRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(1);
-
-  useLayoutEffect(() => {
-    if (!enabled || !boardRef.current) return;
-
-    const board = boardRef.current;
-    const updateScale = () => {
-      const width = board.clientWidth;
-      const height = board.clientHeight;
-      if (width === 0 || height === 0) return;
-
-      const nextScale = Math.min(width / tableStageWidth, height / tableStageHeight);
-      setScale(Math.max(0.25, Math.min(1.15, Number(nextScale.toFixed(4)))));
-    };
-
-    updateScale();
-
-    if (typeof ResizeObserver === "undefined") {
-      window.addEventListener("resize", updateScale);
-      return () => window.removeEventListener("resize", updateScale);
-    }
-
-    const observer = new ResizeObserver(updateScale);
-    observer.observe(board);
-    return () => observer.disconnect();
-  }, [enabled]);
-
-  return {
-    boardRef,
-    style: { "--table-stage-scale": String(scale) } as CSSProperties
-  };
-}
-
-function PlayerSpot({
+function PlayerBadgeCard({
   player,
   distance,
   active,
-  isSelf,
-  privateMelds
+  isSelf
 }: {
   player: PublicPlayerState;
   distance: number;
   active: boolean;
   isSelf: boolean;
-  privateMelds: Meld[] | undefined;
 }) {
-  const displayMelds = privateMelds ?? player.melds;
-  const revealedHand = player.revealedHand;
-  const showRevealedHand = Boolean(revealedHand?.length);
-  const handRailClassName = ["revealedHandRail", distance === 1 || distance === 3 ? "side" : ""].filter(Boolean).join(" ");
-
   return (
-    <div className={["playerSpot", `spot${distance}`, active ? "active" : "", isSelf ? "self" : ""].filter(Boolean).join(" ")}>
+    <div className={["playerBadgeRail", `badge${distance}`, active ? "active" : "", isSelf ? "self" : ""].filter(Boolean).join(" ")}>
       <div className="playerBadge">
         <span className="avatar">{player.isBot ? <Bot size={18} /> : initials(player.name ?? windLabels[player.wind])}</span>
         <div>
@@ -197,16 +173,71 @@ function PlayerSpot({
           </p>
         </div>
         <span className="turnChip">
-          {active ? "出牌" : player.declaredRiichi ? "立直" : player.declaredTing ? "聽" : `${revealedHand?.length ?? player.handCount}張`}
+          {active ? "出牌" : player.declaredRiichi ? "立直" : player.declaredTing ? "聽" : `${player.revealedHand?.length ?? player.handCount}張`}
         </span>
       </div>
+    </div>
+  );
+}
 
-      <div className="playerSpotStats">
-        <span>{player.handCount} 張</span>
-        <span>{displayMelds.length} 副露</span>
-        {player.flowerTiles.length > 0 && <span>{player.flowerTiles.length} 花</span>}
-      </div>
+function MeldRail({
+  player,
+  distance,
+  isSelf,
+  privateMelds
+}: {
+  player: PublicPlayerState;
+  distance: number;
+  isSelf: boolean;
+  privateMelds: Meld[] | undefined;
+}) {
+  const displayMelds = privateMelds ?? player.melds;
+  if (displayMelds.length === 0) {
+    return null;
+  }
 
+  return (
+    <div className={["meldRail", `meldRail${distance}`].join(" ")} aria-label={`${player.name ?? windLabels[player.wind]} 副露`}>
+      {displayMelds.map((meld) => (
+        <span className="spotMeld" key={meld.id}>
+          <MeldTiles meld={meld} revealConcealed={isSelf} />
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function FlowerRail({ player, distance }: { player: PublicPlayerState; distance: number }) {
+  if (player.flowerTiles.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className={["flowerRail", `flowerRail${distance}`].join(" ")} aria-label={`${player.name ?? windLabels[player.wind]} 花牌`}>
+      {player.flowerTiles.map((tile) => (
+        <MiniTile key={tile.id} tile={tile} flower />
+      ))}
+    </div>
+  );
+}
+
+function PlayerSpot({
+  player,
+  distance,
+  active,
+  isSelf
+}: {
+  player: PublicPlayerState;
+  distance: number;
+  active: boolean;
+  isSelf: boolean;
+}) {
+  const revealedHand = player.revealedHand;
+  const showRevealedHand = Boolean(revealedHand?.length);
+  const handRailClassName = ["revealedHandRail", distance === 1 || distance === 3 ? "side" : ""].filter(Boolean).join(" ");
+
+  return (
+    <div className={["playerSpot", `spot${distance}`, active ? "active" : "", isSelf ? "self" : ""].filter(Boolean).join(" ")}>
       {showRevealedHand ? (
         <div className={handRailClassName}>
           {revealedHand!.map((tile) => (
@@ -218,19 +249,6 @@ function PlayerSpot({
           <TileBacks count={Math.min(player.handCount, 18)} vertical={distance === 1 || distance === 3} />
         </div>
       ) : null}
-
-      {(displayMelds.length > 0 || player.flowerTiles.length > 0) && (
-        <div className="spotMelds">
-          {displayMelds.map((meld) => (
-            <span className="spotMeld" key={meld.id}>
-              <MeldTiles meld={meld} revealConcealed={isSelf} />
-            </span>
-          ))}
-          {player.flowerTiles.map((tile) => (
-            <MiniTile key={tile.id} tile={tile} flower />
-          ))}
-        </div>
-      )}
 
     </div>
   );

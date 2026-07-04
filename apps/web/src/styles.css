@@ -3486,20 +3486,237 @@ input {
   }
 }
 
-.scaledTableBoard {
-  --table-stage-width: 1280px;
-  --table-stage-height: 560px;
-  --table-stage-scale: 1;
-}
-
 .tableStage {
   position: absolute;
-  left: 50%;
-  top: 50%;
-  width: var(--table-stage-width);
-  height: var(--table-stage-height);
-  transform: translate(-50%, -50%) scale(var(--table-stage-scale));
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: none;
   transform-origin: center;
+}
+
+.scaledTableBoard .playerBadgeRail {
+  position: absolute;
+  z-index: 7;
+  width: 178px;
+  pointer-events: none;
+  filter: drop-shadow(0 10px 12px rgba(0, 0, 0, 0.32));
+}
+
+.scaledTableBoard .meldRail {
+  position: absolute;
+  z-index: 6;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  max-width: 300px;
+  padding: 3px;
+  border: 1px solid rgba(255, 232, 178, 0.12);
+  border-radius: 6px;
+  background: rgba(4, 8, 16, 0.22);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+}
+
+.scaledTableBoard .meldRail0 {
+  right: 16px;
+  bottom: 76px;
+  justify-content: flex-end;
+}
+
+.scaledTableBoard .meldRail1 {
+  right: 16px;
+  top: 76px;
+  justify-content: flex-end;
+}
+
+.scaledTableBoard .meldRail2 {
+  left: 16px;
+  top: 76px;
+}
+
+.scaledTableBoard .meldRail3 {
+  left: 16px;
+  bottom: 76px;
+}
+
+.scaledTableBoard .flowerRail {
+  position: absolute;
+  z-index: 6;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 236px;
+  padding: 3px;
+  border: 1px solid rgba(245, 202, 96, 0.18);
+  border-radius: 6px;
+  background: rgba(4, 8, 16, 0.22);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+}
+
+.scaledTableBoard .flowerRail0 {
+  right: 204px;
+  bottom: 18px;
+  justify-content: flex-end;
+}
+
+.scaledTableBoard .flowerRail1 {
+  right: 204px;
+  top: 18px;
+  justify-content: flex-end;
+}
+
+.scaledTableBoard .flowerRail2 {
+  left: 204px;
+  top: 18px;
+}
+
+.scaledTableBoard .flowerRail3 {
+  left: 204px;
+  bottom: 18px;
+}
+
+.scaledTableBoard .badge0 {
+  right: 12px;
+  bottom: 12px;
+}
+
+.scaledTableBoard .badge1 {
+  right: 12px;
+  top: 12px;
+}
+
+.scaledTableBoard .badge2 {
+  left: 12px;
+  top: 12px;
+}
+
+.scaledTableBoard .badge3 {
+  left: 12px;
+  bottom: 12px;
+}
+
+.scaledTableBoard .playerBadge {
+  min-height: 54px;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  padding: 5px 6px;
+}
+
+.scaledTableBoard .playerBadgeRail.active .playerBadge {
+  border-color: rgba(245, 202, 96, 0.78);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05),
+    0 0 0 2px rgba(245, 202, 96, 0.16),
+    0 5px 0 rgba(3, 6, 12, 0.42);
+}
+
+.scaledTableBoard .playerBadge .avatar {
+  width: 40px;
+  height: 40px;
+}
+
+.scaledTableBoard .playerBadge .turnChip {
+  grid-column: auto;
+  justify-self: end;
+  min-width: 38px;
+  min-height: 22px;
+  margin-top: 0;
+  padding: 0 6px;
+}
+
+.scaledTableBoard .playerSpot {
+  position: absolute;
+  z-index: 4;
+  min-width: 0;
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  filter: none;
+}
+
+.scaledTableBoard .wallTop {
+  left: 25%;
+  right: 25%;
+  top: 96px;
+}
+
+.scaledTableBoard .wallRight {
+  right: 7%;
+  top: 29%;
+}
+
+.scaledTableBoard .wallLeft {
+  left: 7%;
+  top: 29%;
+}
+
+.scaledTableBoard .spot0 {
+  left: 50%;
+  bottom: 132px;
+  width: 760px;
+  transform: translateX(-50%);
+}
+
+.scaledTableBoard .spot1 {
+  right: 148px;
+  top: 50%;
+  width: 102px;
+  transform: translateY(-50%);
+}
+
+.scaledTableBoard .spot2 {
+  left: 50%;
+  top: 152px;
+  width: 760px;
+  transform: translateX(-50%);
+}
+
+.scaledTableBoard .spot3 {
+  left: 148px;
+  top: 50%;
+  width: 102px;
+  transform: translateY(-50%);
+}
+
+.scaledTableBoard .revealedHandRail {
+  max-width: 100%;
+  background: rgba(7, 10, 18, 0.18);
+  backdrop-filter: blur(4px);
+}
+
+.scaledTableBoard .spot0 .revealedHandRail,
+.scaledTableBoard .spot2 .revealedHandRail {
+  flex-wrap: nowrap;
+}
+
+.scaledTableBoard .revealedHandRail.side {
+  grid-template-columns: repeat(3, 25px);
+}
+
+.scaledTableBoard .spotMelds {
+  max-width: 100%;
+}
+
+.scaledTableBoard .spot0 .spotMelds,
+.scaledTableBoard .spot2 .spotMelds {
+  max-width: 150px;
+}
+
+.scaledTableBoard .spot0:has(.revealedHandRail) .spotMelds,
+.scaledTableBoard .spot2:has(.revealedHandRail) .spotMelds {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.scaledTableBoard .spot0:has(.revealedHandRail) .spotMelds {
+  left: 0;
+}
+
+.scaledTableBoard .spot2:has(.revealedHandRail) .spotMelds {
+  right: 0;
 }
 
 @media (min-width: 861px) {
@@ -3626,5 +3843,158 @@ input {
     width: 100%;
     height: 100%;
     transform: none;
+  }
+
+  .scaledTableBoard .playerBadgeRail {
+    width: 128px;
+  }
+
+  .scaledTableBoard .meldRail {
+    gap: 2px;
+    max-width: 126px;
+    padding: 2px;
+  }
+
+  .scaledTableBoard .meldRail0 {
+    right: 6px;
+    bottom: 58px;
+  }
+
+  .scaledTableBoard .meldRail1 {
+    right: 6px;
+    top: 58px;
+  }
+
+  .scaledTableBoard .meldRail2 {
+    left: 6px;
+    top: 58px;
+  }
+
+  .scaledTableBoard .meldRail3 {
+    left: 6px;
+    bottom: 58px;
+  }
+
+  .scaledTableBoard .flowerRail {
+    gap: 2px;
+    max-width: 110px;
+    padding: 2px;
+  }
+
+  .scaledTableBoard .flowerRail .miniTile {
+    width: 20px;
+    min-width: 20px;
+    height: 28px;
+    border-radius: 4px;
+  }
+
+  .scaledTableBoard .flowerRail0 {
+    right: 142px;
+    bottom: 8px;
+  }
+
+  .scaledTableBoard .flowerRail1 {
+    right: 142px;
+    top: 8px;
+  }
+
+  .scaledTableBoard .flowerRail2 {
+    left: 142px;
+    top: 8px;
+  }
+
+  .scaledTableBoard .flowerRail3 {
+    left: 142px;
+    bottom: 8px;
+  }
+
+  .scaledTableBoard .badge0 {
+    right: 6px;
+    bottom: 6px;
+  }
+
+  .scaledTableBoard .badge1 {
+    right: 6px;
+    top: 6px;
+  }
+
+  .scaledTableBoard .badge2 {
+    left: 6px;
+    top: 6px;
+  }
+
+  .scaledTableBoard .badge3 {
+    left: 6px;
+    bottom: 6px;
+  }
+
+  .scaledTableBoard .playerBadge {
+    min-height: 46px;
+    grid-template-columns: 32px minmax(0, 1fr);
+    padding: 5px;
+  }
+
+  .scaledTableBoard .playerBadge .avatar {
+    width: 30px;
+    height: 30px;
+  }
+
+  .scaledTableBoard .playerBadge .turnChip {
+    grid-column: 1 / -1;
+    justify-self: start;
+    min-height: 20px;
+    margin-top: -2px;
+    font-size: 10px;
+  }
+
+  .scaledTableBoard .badge1 .playerBadge,
+  .scaledTableBoard .badge3 .playerBadge {
+    grid-template-columns: 32px;
+    justify-content: center;
+  }
+
+  .scaledTableBoard .badge1 .playerBadge > div,
+  .scaledTableBoard .badge3 .playerBadge > div {
+    display: none;
+  }
+
+  .scaledTableBoard .badge1 .playerBadge .turnChip,
+  .scaledTableBoard .badge3 .playerBadge .turnChip {
+    justify-self: center;
+  }
+
+  .scaledTableBoard .spot0 {
+    bottom: 62px;
+    width: min(360px, 76%);
+  }
+
+  .scaledTableBoard .spot1 {
+    right: 92px;
+    width: 58px;
+  }
+
+  .scaledTableBoard .spot2 {
+    top: 62px;
+    width: min(360px, 76%);
+  }
+
+  .scaledTableBoard .spot3 {
+    left: 92px;
+    width: 58px;
+  }
+
+  .scaledTableBoard .spot0 .revealedHandRail,
+  .scaledTableBoard .spot2 .revealedHandRail {
+    flex-wrap: wrap;
+  }
+
+  .scaledTableBoard .revealedHandRail.side {
+    grid-template-columns: repeat(2, 22px);
+  }
+
+  .scaledTableBoard .revealedHandRail .miniTile {
+    width: 20px;
+    min-width: 20px;
+    height: 28px;
   }
 }
