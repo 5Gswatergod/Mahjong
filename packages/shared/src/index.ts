@@ -212,6 +212,7 @@ export interface PublicClaimWindow {
 
 export interface PublicPlayerState extends PlayerSeat {
   handCount: number;
+  revealedHand?: Tile[];
   flowerTiles: Tile[];
   melds: Meld[];
   discards: Tile[];

@@ -608,6 +608,40 @@ describe("engine", () => {
     expect(privateState.hand.at(-1)?.id).toBe(drawnTile.id);
   });
 
+  it("reveals hands only when building a spectator public state", () => {
+    const game = createGame(seats(), { random: () => 0.42 });
+    const hand = tiles([
+      "characters:1",
+      "characters:2",
+      "characters:3",
+      "dots:1",
+      "dots:2",
+      "dots:3",
+      "bamboo:1",
+      "bamboo:2",
+      "bamboo:3",
+      "wind:east",
+      "wind:east",
+      "dragon:red",
+      "dragon:red",
+      "dragon:green",
+      "dragon:green",
+      "wind:south",
+      "wind:west"
+    ]);
+    const drawnTile = hand[0]!;
+    game.players[0]!.hand = hand;
+    game.players[0]!.drawnTileId = drawnTile.id;
+
+    expect(toPublicGameState(game).players[0]?.revealedHand).toBeUndefined();
+
+    const spectatorState = toPublicGameState(game, { revealHands: true });
+    const revealedIds = spectatorState.players[0]?.revealedHand?.map((tile) => tile.id);
+    expect(revealedIds).toHaveLength(hand.length);
+    expect(new Set(revealedIds)).toEqual(new Set(hand.map((tile) => tile.id)));
+    expect(revealedIds?.at(-1)).toBe(drawnTile.id);
+  });
+
   it("keeps claim options private while publishing the claim deadline", () => {
     const game = createGame(seats(), { random: () => 0.42 });
     const discardTile = tile("dragon:red", 2);

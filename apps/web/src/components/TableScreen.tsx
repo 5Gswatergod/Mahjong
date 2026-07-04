@@ -182,6 +182,9 @@ function PlayerSpot({
   privateMelds: Meld[] | undefined;
 }) {
   const displayMelds = privateMelds ?? player.melds;
+  const revealedHand = player.revealedHand;
+  const showRevealedHand = Boolean(revealedHand?.length);
+  const handRailClassName = ["revealedHandRail", distance === 1 || distance === 3 ? "side" : ""].filter(Boolean).join(" ");
 
   return (
     <div className={["playerSpot", `spot${distance}`, active ? "active" : "", isSelf ? "self" : ""].filter(Boolean).join(" ")}>
@@ -193,7 +196,9 @@ function PlayerSpot({
             {windLabels[player.wind]}家 · {formatPoints(player.coins)}
           </p>
         </div>
-        <span className="turnChip">{active ? "出牌" : player.declaredRiichi ? "立直" : player.declaredTing ? "聽" : `${player.handCount}張`}</span>
+        <span className="turnChip">
+          {active ? "出牌" : player.declaredRiichi ? "立直" : player.declaredTing ? "聽" : `${revealedHand?.length ?? player.handCount}張`}
+        </span>
       </div>
 
       <div className="playerSpotStats">
@@ -202,11 +207,17 @@ function PlayerSpot({
         {player.flowerTiles.length > 0 && <span>{player.flowerTiles.length} 花</span>}
       </div>
 
-      {!isSelf && (
+      {showRevealedHand ? (
+        <div className={handRailClassName}>
+          {revealedHand!.map((tile) => (
+            <MiniTile key={tile.id} tile={tile} />
+          ))}
+        </div>
+      ) : !isSelf ? (
         <div className={distance === 1 || distance === 3 ? "opponentWall vertical" : "opponentWall"}>
           <TileBacks count={Math.min(player.handCount, 18)} vertical={distance === 1 || distance === 3} />
         </div>
-      )}
+      ) : null}
 
       {(displayMelds.length > 0 || player.flowerTiles.length > 0) && (
         <div className="spotMelds">

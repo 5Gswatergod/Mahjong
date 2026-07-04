@@ -83,6 +83,10 @@ interface Room {
   autoTingTimer?: NodeJS.Timeout;
 }
 
+interface RoomSnapshotOptions {
+  revealHands?: boolean;
+}
+
 const currentFile = fileURLToPath(import.meta.url);
 const currentDir = path.dirname(currentFile);
 const port = Number(process.env.PORT ?? 4000);
@@ -708,7 +712,12 @@ function afterGameMutation(room: Room): void {
 }
 
 function broadcastRoom(room: Room): void {
-  io.to(room.code).emit("room.snapshot", snapshotRoom(room));
+  for (const socket of io.sockets.sockets.values()) {
+    if (socket.data.roomCode !== room.code) {
+      continue;
+    }
+    socket.emit("room.snapshot", snapshotRoom(room, snapshotOptionsForSocket(socket)));
+  }
   if (room.game) {
     broadcastGame(room);
   }
@@ -719,16 +728,14 @@ function broadcastGame(room: Room): void {
     return;
   }
   const publicState = toPublicGameState(room.game);
-  io.to(room.code).emit("game.publicState", publicState);
-  for (const seat of room.seats) {
-    if (!seat.playerId) {
+  const spectatorState = toPublicGameState(room.game, { revealHands: true });
+  for (const socket of io.sockets.sockets.values()) {
+    if (socket.data.roomCode !== room.code) {
       continue;
     }
-    const sockets = [...io.sockets.sockets.values()].filter(
-      (socket) => socket.data.roomCode === room.code && socket.data.role === "player" && socket.data.playerId === seat.playerId
-    );
-    for (const socket of sockets) {
-      const privateState = getPrivateState(room.game, seat.seatIndex);
+    socket.emit("game.publicState", socket.data.role === "spectator" ? spectatorState : publicState);
+    if (socket.data.role === "player") {
+      const privateState = getPrivateState(room.game, requirePlayerSeatIndex(socket));
       socket.emit("game.privateState", privateState);
       socket.emit("game.actionRequired", privateState.legalActions);
     }
@@ -740,9 +747,9 @@ function emitFullState(room: Room, socketId: string): void {
   if (!socket) {
     return;
   }
-  socket.emit("room.snapshot", snapshotRoom(room));
+  socket.emit("room.snapshot", snapshotRoom(room, snapshotOptionsForSocket(socket)));
   if (room.game) {
-    socket.emit("game.publicState", toPublicGameState(room.game));
+    socket.emit("game.publicState", gameStateForSocket(room.game, socket));
     if (socket.data.role === "player") {
       const privateState = getPrivateState(room.game, requirePlayerSeatIndex(socket));
       socket.emit("game.privateState", privateState);
@@ -956,7 +963,7 @@ function claimPriority(type: LegalAction["type"]): number {
   return 0;
 }
 
-function snapshotRoom(room: Room): RoomSnapshot {
+function snapshotRoom(room: Room, options: RoomSnapshotOptions = {}): RoomSnapshot {
   return {
     code: room.code,
     mode: room.mode,
@@ -965,10 +972,18 @@ function snapshotRoom(room: Room): RoomSnapshot {
     hostPlayerId: room.hostPlayerId,
     seats: room.seats,
     ...(room.seatDraw ? { seatDraw: room.seatDraw } : {}),
-    ...(room.game ? { game: toPublicGameState(room.game) } : {}),
+    ...(room.game ? { game: toPublicGameState(room.game, options.revealHands ? { revealHands: true } : {}) } : {}),
     createdAt: room.createdAt,
     updatedAt: room.updatedAt
   };
+}
+
+function snapshotOptionsForSocket(socket: MahjongSocket): RoomSnapshotOptions {
+  return socket.data.role === "spectator" ? { revealHands: true } : {};
+}
+
+function gameStateForSocket(game: CoreGame, socket: MahjongSocket) {
+  return socket.data.role === "spectator" ? toPublicGameState(game, { revealHands: true }) : toPublicGameState(game);
 }
 
 function setConnected(room: Room, playerId: string, connected: boolean): void {

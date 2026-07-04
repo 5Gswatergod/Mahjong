@@ -93,6 +93,10 @@ export interface CreateGameOptions {
   random?: () => number;
 }
 
+export interface PublicGameStateOptions {
+  revealHands?: boolean;
+}
+
 export function createGame(seats: PlayerSeat[], options: CreateGameOptions = {}): CoreGame {
   const mode = options.mode ?? "taiwan";
   const dealerSeat = options.dealerSeat ?? 0;
@@ -169,7 +173,7 @@ export function createGame(seats: PlayerSeat[], options: CreateGameOptions = {})
   return game;
 }
 
-export function toPublicGameState(game: CoreGame): GameState {
+export function toPublicGameState(game: CoreGame, options: PublicGameStateOptions = {}): GameState {
   return {
     id: game.id,
     handId: game.handId,
@@ -208,6 +212,11 @@ export function toPublicGameState(game: CoreGame): GameState {
       ready: player.ready,
       connected: player.connected,
       handCount: player.hand.length,
+      ...(options.revealHands
+        ? {
+            revealedHand: orderPrivateHand(player.hand, player.drawnTileId?.replace("supplement:", ""))
+          }
+        : {}),
       flowerTiles: player.flowers,
       melds: publicMelds(player.melds),
       discards: player.discards,

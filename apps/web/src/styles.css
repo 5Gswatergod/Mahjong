@@ -1267,6 +1267,28 @@ input {
   justify-content: flex-start;
 }
 
+.revealedHandRail {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 3px;
+  padding: 4px;
+  background: rgba(7, 10, 18, 0.34);
+  border: 1px solid rgba(255, 232, 178, 0.1);
+  border-radius: 8px;
+}
+
+.revealedHandRail.side {
+  display: grid;
+  grid-template-columns: repeat(4, 25px);
+  align-content: center;
+  justify-content: center;
+}
+
+.revealedHandRail .miniTile {
+  box-shadow: 0 2px 0 rgba(88, 68, 33, 0.58);
+}
+
 .spot1 .opponentWall,
 .spot3 .opponentWall {
   display: none;
