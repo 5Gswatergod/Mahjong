@@ -59,8 +59,20 @@ export function MiniTile({ tile, flower }: { tile: Tile; flower?: boolean }) {
   );
 }
 
-export function MeldTiles({ meld, revealConcealed }: { meld: Meld; revealConcealed?: boolean }) {
+type ConcealedRevealMode = boolean | "all";
+
+export function MeldTiles({ meld, revealConcealed }: { meld: Meld; revealConcealed?: ConcealedRevealMode }) {
   if (meld.concealed || meld.type === "concealedKong") {
+    if (revealConcealed === "all" && meld.tiles.length > 0) {
+      return (
+        <span className="concealedMeld revealed" aria-label={`暗槓 ${meld.tiles[0]?.label ?? ""}`.trim()}>
+          {meld.tiles.map((tile) => (
+            <MiniTile key={`${meld.id}-${tile.id}`} tile={tile} />
+          ))}
+        </span>
+      );
+    }
+
     if (revealConcealed && meld.tiles[0]) {
       return (
         <span className="concealedMeld revealed" aria-label={`暗槓 ${meld.tiles[0].label}`}>

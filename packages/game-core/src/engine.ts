@@ -865,7 +865,7 @@ function settleWin(game: CoreGame, context: WinContext): void {
   game.settlement = {
     ...settlement,
     winnerHand: buildSettlementHand(winner, context),
-    winnerMelds: publicMelds(winner.melds)
+    winnerMelds: settlementMelds(winner.melds)
   };
   game.phase = "settled";
   clearTurnTimer(game);
@@ -1400,6 +1400,13 @@ function publicMelds(melds: Meld[]): Meld[] {
     }
     return meld;
   });
+}
+
+function settlementMelds(melds: Meld[]): Meld[] {
+  return melds.map((meld) => ({
+    ...meld,
+    tiles: [...meld.tiles]
+  }));
 }
 
 function toHiddenTile(meldId: string, index: number): Tile {

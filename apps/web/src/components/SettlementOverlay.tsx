@@ -58,7 +58,7 @@ export function SettlementOverlay({
               <>
                 {displayMelds.map((meld) => (
                   <span className="settlementMeld" key={meld.id}>
-                    <MeldTiles meld={meld} />
+                    <MeldTiles meld={meld} revealConcealed="all" />
                   </span>
                 ))}
                 {displayTiles.map((tile) => (

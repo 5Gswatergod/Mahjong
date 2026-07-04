@@ -437,6 +437,53 @@ describe("engine", () => {
     expect(privateMeld.tiles.map(tileKey)).toEqual(["characters:1", "characters:1", "characters:1", "characters:1"]);
   });
 
+  it("reveals concealed kong tiles in the public settlement payload", () => {
+    const game = createGame(seats(), { random: () => 0.42 });
+    const kongTiles = tiles(["dragon:red", "dragon:red", "dragon:red", "dragon:red"]);
+    const winningHand = tiles([
+      "characters:1",
+      "characters:2",
+      "characters:3",
+      "characters:4",
+      "characters:5",
+      "characters:6",
+      "dots:1",
+      "dots:2",
+      "dots:3",
+      "bamboo:1",
+      "bamboo:2",
+      "bamboo:3",
+      "wind:east",
+      "wind:east"
+    ]);
+    game.currentSeat = 0;
+    game.players[0]!.hand = winningHand;
+    game.players[0]!.melds = [
+      {
+        id: "meld_concealed",
+        type: "concealedKong",
+        tiles: kongTiles,
+        claimedTileId: kongTiles[0]!.id,
+        fromSeat: 0,
+        concealed: true
+      }
+    ];
+    game.players[0]!.drawnTileId = winningHand.at(-1)!.id;
+
+    expect(toPublicGameState(game).players[0]!.melds[0]!.tiles.every((candidate) => candidate.label === "暗")).toBe(true);
+
+    applySelfDrawWin(game, 0);
+
+    const publicState = toPublicGameState(game);
+    expect(publicState.players[0]!.melds[0]!.tiles.every((candidate) => candidate.label === "暗")).toBe(true);
+    expect(publicState.settlement?.winnerMelds?.[0]?.tiles.map(tileKey)).toEqual([
+      "dragon:red",
+      "dragon:red",
+      "dragon:red",
+      "dragon:red"
+    ]);
+  });
+
   it("replaces a drawn flower with exactly one supplement tile", () => {
     const game = createGame(seats(), { random: () => 0.42 });
     const discardTile = tile("dragon:white", 0);
