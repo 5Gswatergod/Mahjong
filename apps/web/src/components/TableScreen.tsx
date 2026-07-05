@@ -1,7 +1,7 @@
 import { Bot, RefreshCw } from "lucide-react";
 import type { GameState, Meld, PublicPlayerState, RoomSnapshot } from "@taiwan-mahjong/shared";
-import { windLabels } from "../constants";
-import { formatPoints, initials } from "../utils/labels";
+import { modeLabels, windLabels } from "../constants";
+import { formatPoints, initials, phaseLabel } from "../utils/labels";
 import { MeldTiles, MiniTile, TileBacks } from "./Tiles";
 
 export function TableScreen({
@@ -49,6 +49,7 @@ export function TableScreen({
     .sort((left, right) => left.distance - right.distance);
   const bottomPlayer = orderedSeats.find(({ distance }) => distance === 0)?.player;
   const liveWallCount = Math.max(0, game.wallCount - game.deadWallCount);
+  const currentPlayer = game.players.find((player) => player.seatIndex === game.currentSeat);
   const rightPlayer = orderedSeats.find(({ distance }) => distance === 1)?.player;
   const topPlayer = orderedSeats.find(({ distance }) => distance === 2)?.player;
   const leftPlayer = orderedSeats.find(({ distance }) => distance === 3)?.player;
@@ -129,8 +130,31 @@ export function TableScreen({
             <span className="lastDiscardLabel">{game.lastDiscard && lastDiscardPlayer ? `${windLabels[lastDiscardPlayer.wind]}家打出` : ""}</span>
           </div>
         </div>
+
+        <TableInfoPanel game={game} bottomPlayer={bottomPlayer} currentPlayer={currentPlayer} />
       </div>
     </div>
+  );
+}
+
+function TableInfoPanel({
+  game,
+  bottomPlayer,
+  currentPlayer
+}: {
+  game: GameState;
+  bottomPlayer: PublicPlayerState | undefined;
+  currentPlayer: PublicPlayerState | undefined;
+}) {
+  return (
+    <aside className="tableInfoPanel" aria-label="牌局資訊">
+      <span>{modeLabels[game.mode]}</span>
+      <strong>{windLabels[game.roundWind]}場</strong>
+      <span>{currentPlayer ? `${windLabels[currentPlayer.wind]}家` : "-"}</span>
+      <span>{game.mode === "riichi" ? `${game.riichi?.honba ?? game.dealerStreak} 本場` : `${game.dealerStreak} 連莊`}</span>
+      <strong>{formatPoints(bottomPlayer?.coins ?? 0)}</strong>
+      <span>{phaseLabel(game.phase)}</span>
+    </aside>
   );
 }
 
@@ -152,7 +176,8 @@ function PlayerBadgeCard({
         <div>
           <strong>{player.name ?? `玩家 ${player.seatIndex + 1}`}</strong>
           <p>
-            {windLabels[player.wind]}家 · {formatPoints(player.coins)}
+            <span>{windLabels[player.wind]}家</span>
+            <span className="badgePoints">{formatPoints(player.coins)}</span>
           </p>
         </div>
         <span className="turnChip">

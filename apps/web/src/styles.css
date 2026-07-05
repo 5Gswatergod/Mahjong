@@ -1221,8 +1221,23 @@ input {
 
 .playerBadge p {
   margin: 2px 0 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
   color: #bec7d0;
   font-size: 11px;
+}
+
+.playerBadge p span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.badgePoints {
+  flex: 0 0 auto;
+  color: #e9f2f0;
+  font-weight: 900;
 }
 
 .turnChip {
@@ -3672,6 +3687,46 @@ input {
   bottom: var(--table-flower-y);
 }
 
+.scaledTableBoard .tableInfoPanel {
+  position: absolute;
+  right: calc(var(--table-flower-x) + 8px);
+  bottom: calc(var(--table-corner-row-offset) + 48px);
+  z-index: 6;
+  width: 190px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 5px;
+  color: #f8efd0;
+  background: rgba(4, 8, 16, 0.36);
+  border: 1px solid rgba(245, 202, 96, 0.18);
+  border-radius: 6px;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
+  pointer-events: none;
+}
+
+.scaledTableBoard .tableInfoPanel span,
+.scaledTableBoard .tableInfoPanel strong {
+  min-width: 0;
+  min-height: 20px;
+  padding: 3px 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: rgba(42, 64, 84, 0.62);
+  border: 1px solid rgba(101, 198, 202, 0.14);
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.scaledTableBoard .tableInfoPanel strong {
+  color: #8ce6df;
+}
+
 .scaledTableBoard .badge0 {
   right: var(--table-edge);
   bottom: var(--table-edge);
@@ -4162,18 +4217,28 @@ input {
 
   .scaledTableBoard .badge1 .playerBadge,
   .scaledTableBoard .badge3 .playerBadge {
-    grid-template-columns: 32px;
-    justify-content: center;
-  }
-
-  .scaledTableBoard .badge1 .playerBadge > div,
-  .scaledTableBoard .badge3 .playerBadge > div {
-    display: none;
+    grid-template-columns: 32px minmax(0, 1fr);
+    justify-content: stretch;
   }
 
   .scaledTableBoard .badge1 .playerBadge .turnChip,
   .scaledTableBoard .badge3 .playerBadge .turnChip {
-    justify-self: center;
+    justify-self: start;
+  }
+
+  .scaledTableBoard .tableInfoPanel {
+    right: calc(var(--table-flower-x) + 4px);
+    bottom: calc(var(--table-corner-row-offset) + 38px);
+    width: 148px;
+    gap: 3px;
+    padding: 4px;
+  }
+
+  .scaledTableBoard .tableInfoPanel span,
+  .scaledTableBoard .tableInfoPanel strong {
+    min-height: 18px;
+    padding: 2px 4px;
+    font-size: 9px;
   }
 
   .scaledTableBoard .spot0 {
@@ -4342,6 +4407,12 @@ input {
 
   .scaledTableBoard .playerBadge p {
     font-size: 10px;
+  }
+
+  .scaledTableBoard .tableInfoPanel {
+    right: 124px;
+    bottom: 80px;
+    width: 132px;
   }
 
   .scaledTableBoard .playerBadge .turnChip {
@@ -4533,7 +4604,7 @@ input {
   }
 
   .scaledTableBoard .playerBadge p {
-    display: none;
+    font-size: 9px;
   }
 
   .scaledTableBoard .playerBadge .turnChip {
@@ -4548,7 +4619,22 @@ input {
 
   .scaledTableBoard .badge1 .playerBadge,
   .scaledTableBoard .badge3 .playerBadge {
-    grid-template-columns: 24px;
+    grid-template-columns: 24px minmax(0, 1fr);
+  }
+
+  .scaledTableBoard .tableInfoPanel {
+    right: 104px;
+    bottom: 50px;
+    width: 118px;
+    gap: 2px;
+    padding: 3px;
+  }
+
+  .scaledTableBoard .tableInfoPanel span,
+  .scaledTableBoard .tableInfoPanel strong {
+    min-height: 16px;
+    padding: 1px 3px;
+    font-size: 8px;
   }
 
   .scaledTableBoard .meldRail {
