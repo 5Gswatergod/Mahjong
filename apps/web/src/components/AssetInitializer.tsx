@@ -1,6 +1,7 @@
 import { Loader2, RefreshCw, X } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { preloadGameAssets, type AssetPreloadProgress } from "../assetPreloader";
+import { BrandMark } from "./BrandMark";
 
 type AssetInitState =
   | { status: "loading"; progress: AssetPreloadProgress }
@@ -89,7 +90,7 @@ export function AssetInitializer({ children }: { children: ReactNode }) {
   return (
     <main className="assetInitShell">
       <section className="assetInitPanel" aria-live="polite">
-        <span className="brandTile">雀</span>
+        <BrandMark />
         <div className="assetInitCopy">
           <h1>正在準備牌桌</h1>
           <p>載入牌面與牌桌素材</p>

@@ -15,6 +15,7 @@ import {
   type Tile
 } from "@taiwan-mahjong/shared";
 import { ActionDock } from "./components/ActionDock";
+import { BrandMark } from "./components/BrandMark";
 import { Hand } from "./components/Hand";
 import { PatternCatalog } from "./components/PatternCatalog";
 import { AudioSettings, AudioSettingsButton, MusicDirector, readStoredMusicVolume } from "./components/GameAudio";
@@ -613,9 +614,9 @@ export function App() {
       {!session && (
         <section className="entryPanel">
           <div className="entryHero">
-            <span className="brandTile">雀</span>
+            <BrandMark />
             <div>
-              <h1>台灣 16 張麻將</h1>
+              <h1>雀局</h1>
               <p>開房、補 AI、即時對局與結算。</p>
             </div>
           </div>
@@ -664,7 +665,7 @@ export function App() {
         <section className="gameExperience">
           <header className="gameHeader">
             <div className="gameTitle">
-              <span className="brandTile compact">雀</span>
+              <BrandMark compact />
               <div>
                 <h1>{modeLabels[room.mode]} 麻將</h1>
                 <p>

@@ -1,7 +1,8 @@
+import { type CSSProperties } from "react";
 import { Bot, RefreshCw } from "lucide-react";
 import type { GameState, Meld, PublicPlayerState, RoomSnapshot } from "@taiwan-mahjong/shared";
 import { modeLabels, windLabels } from "../constants";
-import { formatPoints, initials, phaseLabel } from "../utils/labels";
+import { activeDeadline, formatLatency, formatPoints, initials, phaseLabel } from "../utils/labels";
 import { MeldTiles, MiniTile, TileBacks } from "./Tiles";
 
 export function TableScreen({
@@ -10,7 +11,9 @@ export function TableScreen({
   perspectiveSeatIndex,
   ownSeatIndex,
   privateMelds,
-  myTurn
+  myTurn,
+  serverNow,
+  latencyMs
 }: {
   room: RoomSnapshot;
   game: GameState | null;
@@ -129,10 +132,37 @@ export function TableScreen({
             <span className="lastDiscardTileSlot">{game.lastDiscard ? <MiniTile tile={game.lastDiscard.tile} /> : null}</span>
             <span className="lastDiscardLabel">{game.lastDiscard && lastDiscardPlayer ? `${windLabels[lastDiscardPlayer.wind]}家打出` : ""}</span>
           </div>
+          <CenterCountdown game={game} serverNow={serverNow} />
         </div>
 
-        <TableInfoPanel game={game} bottomPlayer={bottomPlayer} currentPlayer={currentPlayer} />
+        <TableInfoPanel game={game} bottomPlayer={bottomPlayer} currentPlayer={currentPlayer} latencyMs={latencyMs} />
       </div>
+    </div>
+  );
+}
+
+function CenterCountdown({ game, serverNow }: { game: GameState; serverNow: number }) {
+  const deadline = activeDeadline(game);
+
+  if (deadline === undefined) {
+    return (
+      <div className="centerCountdown empty" aria-label="目前沒有倒數">
+        <strong>0</strong>
+        <span>出牌倒數</span>
+      </div>
+    );
+  }
+
+  const totalMs = game.phase === "claiming" ? game.config.claimWindowMs : game.config.autoDiscardMs;
+  const remainingMs = Math.max(0, deadline - serverNow);
+  const seconds = Math.max(0, Math.ceil(remainingMs / 1000));
+  const progress = Math.max(0, Math.min(1, remainingMs / Math.max(totalMs, 1)));
+  const style = { "--timer-progress": `${progress * 360}deg` } as CSSProperties;
+
+  return (
+    <div className={seconds <= 3 ? "centerCountdown urgent" : "centerCountdown"} style={style} aria-label={`剩 ${seconds} 秒`}>
+      <strong>{seconds}</strong>
+      <span>{game.phase === "claiming" ? "回應倒數" : "出牌倒數"}</span>
     </div>
   );
 }
@@ -140,11 +170,13 @@ export function TableScreen({
 function TableInfoPanel({
   game,
   bottomPlayer,
-  currentPlayer
+  currentPlayer,
+  latencyMs
 }: {
   game: GameState;
   bottomPlayer: PublicPlayerState | undefined;
   currentPlayer: PublicPlayerState | undefined;
+  latencyMs: number | null;
 }) {
   return (
     <aside className="tableInfoPanel" aria-label="牌局資訊">
@@ -154,6 +186,7 @@ function TableInfoPanel({
       <span>{game.mode === "riichi" ? `${game.riichi?.honba ?? game.dealerStreak} 本場` : `${game.dealerStreak} 連莊`}</span>
       <strong>{formatPoints(bottomPlayer?.coins ?? 0)}</strong>
       <span>{phaseLabel(game.phase)}</span>
+      <span className="latencyInfo">延遲 {formatLatency(latencyMs)}</span>
     </aside>
   );
 }

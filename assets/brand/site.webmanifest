@@ -1,0 +1,22 @@
+{
+  "name": "雀局",
+  "short_name": "雀局",
+  "description": "台灣 16 張與日式立直麻將對局網站",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b302f",
+  "theme_color": "#0f4c43",
+  "icons": [
+    {
+      "src": "/brand/queju-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/brand/queju-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
