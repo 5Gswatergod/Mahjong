@@ -12,6 +12,7 @@ services:
       PORT: 4000
       STATIC_DIR: /app/apps/web/dist
       WEB_ORIGIN: ${WEB_ORIGIN:?Set WEB_ORIGIN, for example https://mahjong.hydrava.cc}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       DATABASE_URL: ${DATABASE_URL:-}
       POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
       POSTGRES_PORT: ${POSTGRES_PORT:-5432}

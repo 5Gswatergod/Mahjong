@@ -156,6 +156,7 @@ MAHJONG_IMAGE=ghcr.io/5gswatergod/mahjong:latest
 APP_DOMAIN=mahjong.hydrava.cc
 WEB_ORIGIN=https://mahjong.hydrava.cc
 HOST_PORT=4000
+ADMIN_PASSWORD=replace-with-a-long-random-admin-password
 
 POSTGRES_DB=mahjong
 POSTGRES_USER=mahjong
@@ -164,7 +165,7 @@ POSTGRES_HOST=postgres
 POSTGRES_PORT=5432
 ```
 
-`DATABASE_URL` is optional. Leave it unset when using the bundled Postgres service; the app builds the database connection from `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD`. Set `DATABASE_URL` only when pointing the app at an external database.
+`ADMIN_PASSWORD` controls access to `/admin`; use a unique long random value and do not reuse the database password. `DATABASE_URL` is optional. Leave it unset when using the bundled Postgres service; the app builds the database connection from `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD`. Set `DATABASE_URL` only when pointing the app at an external database.
 
 產生密碼：
 

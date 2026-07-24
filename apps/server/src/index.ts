@@ -1,4 +1,5 @@
 import cors from "@fastify/cors";
+import cookie from "@fastify/cookie";
 import fastifyStatic from "@fastify/static";
 import Fastify from "fastify";
 import { existsSync } from "node:fs";
@@ -26,6 +27,7 @@ import {
   toPublicGameState
 } from "@taiwan-mahjong/game-core";
 import {
+  type AdminAuditEntry,
   DEFAULT_GAME_CONFIG,
   type ClientToServerEvents,
   type GameConfig,
@@ -47,6 +49,7 @@ import {
   type BotDecisionContext,
   type BotVisiblePlayer
 } from "./bot-policy.js";
+import { ADMIN_COOKIE_NAME, AdminSessionManager, buildAdminDashboard, type AdminRoomSource } from "./admin.js";
 import { MemoryEventStore, PgEventStore, type EventStore, resolveDatabaseConnection } from "./event-store.js";
 import { applySeatDrawResult, createSeatDrawResult } from "./seat-draw.js";
 
@@ -92,6 +95,7 @@ const currentDir = path.dirname(currentFile);
 const port = Number(process.env.PORT ?? 4000);
 const webOrigin = process.env.WEB_ORIGIN ?? "http://localhost:5173";
 const staticDir = process.env.STATIC_DIR ?? path.resolve(currentDir, "../../web/dist");
+const serverStartedAt = Date.now();
 const fastify = Fastify({ logger: true });
 const io = new Server<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>(fastify.server, {
   cors: {
@@ -105,8 +109,11 @@ const sessions = new Map<string, GuestSession>();
 const rooms = new Map<string, Room>();
 const databaseConnection = resolveDatabaseConnection();
 const eventStore: EventStore = databaseConnection ? new PgEventStore(databaseConnection) : new MemoryEventStore();
+const adminSessions = new AdminSessionManager(process.env.ADMIN_PASSWORD);
+const recentAdminActions: AdminAuditEntry[] = [];
 
 await eventStore.init();
+await fastify.register(cookie);
 await fastify.register(cors, { origin: webOrigin, credentials: true });
 
 const roomConfigSchema = z
@@ -132,6 +139,93 @@ fastify.get("/health", async () => ({
 fastify.get("/api/time", async () => ({
   serverTime: Date.now()
 }));
+
+fastify.get("/api/admin/session", async (request) => {
+  const expiresAt = adminSessions.getExpiresAt(request.cookies[ADMIN_COOKIE_NAME]);
+  return {
+    configured: adminSessions.configured,
+    authenticated: typeof expiresAt === "number",
+    ...(typeof expiresAt === "number" ? { expiresAt } : {})
+  };
+});
+
+fastify.post("/api/admin/session", async (request, reply) => {
+  const body = z.object({ password: z.string().min(1).max(256) }).parse(request.body ?? {});
+  const result = adminSessions.login(body.password, request.ip);
+
+  if (result.status === "unconfigured") {
+    return reply.code(503).send({ code: "ADMIN_NOT_CONFIGURED", message: "管理員後台尚未設定密碼。" });
+  }
+  if (result.status === "rateLimited") {
+    reply.header("Retry-After", result.retryAfterSeconds);
+    return reply.code(429).send({ code: "ADMIN_LOGIN_RATE_LIMITED", message: "登入失敗次數過多，請稍後再試。" });
+  }
+  if (result.status === "invalid") {
+    return reply.code(401).send({ code: "INVALID_ADMIN_PASSWORD", message: "管理員密碼不正確。" });
+  }
+
+  reply.setCookie(ADMIN_COOKIE_NAME, result.token, {
+    path: "/",
+    httpOnly: true,
+    sameSite: "strict",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: Math.floor((result.expiresAt - Date.now()) / 1000)
+  });
+  return {
+    configured: true,
+    authenticated: true,
+    expiresAt: result.expiresAt
+  };
+});
+
+fastify.delete("/api/admin/session", async (request, reply) => {
+  adminSessions.logout(request.cookies[ADMIN_COOKIE_NAME]);
+  reply.clearCookie(ADMIN_COOKIE_NAME, { path: "/" });
+  return { configured: adminSessions.configured, authenticated: false };
+});
+
+fastify.get("/api/admin/dashboard", async (request, reply) => {
+  if (!adminSessions.getExpiresAt(request.cookies[ADMIN_COOKIE_NAME])) {
+    return reply.code(401).send({ message: "管理員登入已過期。" });
+  }
+
+  return buildAdminDashboard({
+    rooms: [...rooms.values()].map(toAdminRoomSource),
+    recentActions: recentAdminActions,
+    startedAt: serverStartedAt,
+    persistence: databaseConnection ? "postgres" : "memory"
+  });
+});
+
+fastify.post("/api/admin/rooms/:code/close", async (request, reply) => {
+  if (!adminSessions.getExpiresAt(request.cookies[ADMIN_COOKIE_NAME])) {
+    return reply.code(401).send({ message: "管理員登入已過期。" });
+  }
+
+  const params = z.object({ code: z.string().trim().min(4).max(8) }).parse(request.params);
+  const body = z.object({ reason: z.string().trim().max(120).optional() }).parse(request.body ?? {});
+  const roomCode = params.code.toUpperCase();
+  const room = rooms.get(roomCode);
+  if (!room) {
+    return reply.code(404).send({ message: "房間不存在或已關閉。" });
+  }
+
+  const createdAt = Date.now();
+  await persist(room.code, "admin.roomClosed", { reason: body.reason ?? null });
+  disposeRoom(room);
+  rooms.delete(room.code);
+  disconnectRoomClients(room.code, body.reason);
+  recentAdminActions.unshift({
+    id: `admin_action_${nanoid(10)}`,
+    action: "room.closed",
+    roomCode: room.code,
+    ...(body.reason ? { reason: body.reason } : {}),
+    createdAt
+  });
+  recentAdminActions.splice(30);
+
+  return { ok: true, roomCode: room.code };
+});
 
 fastify.post("/api/auth/guest", async (request) => {
   const body = z.object({ name: z.string().trim().min(1).max(20).optional() }).parse(request.body ?? {});
@@ -976,6 +1070,49 @@ function snapshotRoom(room: Room, options: RoomSnapshotOptions = {}): RoomSnapsh
     createdAt: room.createdAt,
     updatedAt: room.updatedAt
   };
+}
+
+function toAdminRoomSource(room: Room): AdminRoomSource {
+  const publicGame = room.game ? toPublicGameState(room.game) : undefined;
+  let spectators = 0;
+  for (const socket of io.sockets.sockets.values()) {
+    if (socket.data.roomCode === room.code && socket.data.role === "spectator") {
+      spectators += 1;
+    }
+  }
+
+  return {
+    code: room.code,
+    mode: room.mode,
+    hostPlayerId: room.hostPlayerId,
+    seats: room.seats,
+    phase: room.seatDraw ? "seatDraw" : publicGame?.phase ?? "waiting",
+    ...(publicGame ? { handId: publicGame.handId, wallCount: publicGame.wallCount } : {}),
+    spectators,
+    createdAt: room.createdAt,
+    updatedAt: room.updatedAt
+  };
+}
+
+function disposeRoom(room: Room): void {
+  for (const timer of room.disconnectTimers.values()) {
+    clearTimeout(timer);
+  }
+  room.disconnectTimers.clear();
+  if (room.seatDrawTimer) clearTimeout(room.seatDrawTimer);
+  if (room.botTimer) clearTimeout(room.botTimer);
+  if (room.autoTingTimer) clearTimeout(room.autoTingTimer);
+}
+
+function disconnectRoomClients(roomCode: string, reason: string | undefined): void {
+  const message = reason ? `房間已由管理員關閉：${reason}` : "房間已由管理員關閉。";
+  for (const socket of io.sockets.sockets.values()) {
+    if (socket.data.roomCode !== roomCode) {
+      continue;
+    }
+    socket.emit("game.error", { message });
+    socket.disconnect(true);
+  }
 }
 
 function snapshotOptionsForSocket(socket: MahjongSocket): RoomSnapshotOptions {

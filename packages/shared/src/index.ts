@@ -281,6 +281,74 @@ export interface GuestAuthResponse {
   token: string;
 }
 
+export interface AdminSessionResponse {
+  configured: boolean;
+  authenticated: boolean;
+  expiresAt?: number;
+}
+
+export type AdminRoomPhase = GamePhase | "seatDraw";
+
+export interface AdminRoomSeat {
+  seatIndex: number;
+  wind: Wind;
+  name?: string;
+  isBot: boolean;
+  isHost: boolean;
+  connected: boolean;
+  ready: boolean;
+  coins: number;
+}
+
+export interface AdminRoomSummary {
+  code: string;
+  mode: GameMode;
+  phase: AdminRoomPhase;
+  seats: AdminRoomSeat[];
+  humanPlayers: number;
+  bots: number;
+  connectedPlayers: number;
+  spectators: number;
+  handId?: string;
+  wallCount?: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface AdminAuditEntry {
+  id: string;
+  action: "room.closed";
+  roomCode: string;
+  reason?: string;
+  createdAt: number;
+}
+
+export interface AdminDashboardResponse {
+  generatedAt: number;
+  server: {
+    startedAt: number;
+    uptimeSeconds: number;
+    persistence: "memory" | "postgres";
+  };
+  totals: {
+    rooms: number;
+    activeGames: number;
+    humanPlayers: number;
+    bots: number;
+    connectedPlayers: number;
+    spectators: number;
+    taiwanRooms: number;
+    riichiRooms: number;
+  };
+  rooms: AdminRoomSummary[];
+  recentActions: AdminAuditEntry[];
+}
+
+export interface AdminCloseRoomResponse {
+  ok: true;
+  roomCode: string;
+}
+
 export type SocketRole = "player" | "spectator";
 
 export type ConnectionRecoveredPayload =
