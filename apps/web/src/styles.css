@@ -581,7 +581,26 @@ input {
 }
 
 .joinBox {
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.spectatorEntryButton {
+  color: #f9edc8;
+  background: linear-gradient(180deg, #244554, #142532);
+  box-shadow: 0 4px 0 #07101a;
+}
+
+.spectatorEntryHint {
+  min-height: 48px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #17332e;
+  background: #edf3ed;
+  border: 1px solid #b7cbbd;
+  border-radius: 8px;
+  font-weight: 800;
 }
 
 .gameExperience {

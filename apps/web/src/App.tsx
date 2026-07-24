@@ -1,4 +1,4 @@
-import { BookOpen, Copy, DoorOpen, Eye, Loader2, Pencil, Play, Save, Send, Shuffle, WifiOff, X } from "lucide-react";
+import { BookOpen, Copy, DoorOpen, Eye, Loader2, Pencil, Play, Save, Send, Share2, Shuffle, WifiOff, X } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 import {
@@ -37,6 +37,7 @@ import {
 } from "./musicAssets";
 import { buildActionHintIds } from "./utils/actions";
 import { phaseLabel } from "./utils/labels";
+import { buildSpectatorPath, buildSpectatorUrl, readSpectatorRoomCode } from "./spectatorUrl";
 
 type MahjongSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
@@ -44,7 +45,8 @@ type MahjongSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 export function App() {
   const [session, setSession] = useState<GuestAuthResponse | null>(() => readSession());
   const [guestName, setGuestName] = useState("");
-  const [joinCode, setJoinCode] = useState("");
+  const [joinCode, setJoinCode] = useState(() => readSpectatorRoomCode(window.location.pathname) ?? "");
+  const [pendingSpectatorCode, setPendingSpectatorCode] = useState(() => readSpectatorRoomCode(window.location.pathname));
   const [profileNameDraft, setProfileNameDraft] = useState("");
   const [selectedMode, setSelectedMode] = useState<GameMode>("taiwan");
   const [roomConfig, setRoomConfig] = useState<GameConfig>(() => defaultRoomConfig("taiwan"));
@@ -211,6 +213,7 @@ export function App() {
       setPrivateState(null);
       setActions([]);
       setSettlement(null);
+      setPendingSpectatorCode((current) => current ?? (isSpectator ? room?.code ?? null : null));
       setIsSpectator(false);
       setSocket((current) => {
         current?.disconnect();
@@ -218,7 +221,7 @@ export function App() {
       });
       setError(message);
     },
-    [session?.name]
+    [isSpectator, room?.code, session?.name]
   );
 
   const runWithFreshSession = useCallback(
@@ -328,6 +331,7 @@ export function App() {
       setActions([]);
       setRoom(snapshot);
       setJoinCode(snapshot.code);
+      replaceAppPath("/");
     } catch (caught) {
       if (caught instanceof AuthExpiredError) {
         handleAuthExpired();
@@ -338,6 +342,49 @@ export function App() {
       setBusy(false);
     }
   }, [applyServerTime, handleAuthExpired, roomConfig, runWithFreshSession, selectedMode, session]);
+
+  const spectateRoom = useCallback(
+    async (requestedCode?: string) => {
+      const roomCode = (requestedCode ?? joinCode).trim().toUpperCase();
+      if (!session || !roomCode) return;
+
+      setBusy(true);
+      setError("");
+      try {
+        const snapshot = await runWithFreshSession((activeSession) =>
+          api<RoomSnapshot>(`/api/rooms/${roomCode}`, activeSession.token, {
+            method: "GET"
+          })
+        );
+        applyServerTime(snapshot.serverTime);
+        setJoinCode(roomCode);
+        setIsSpectator(true);
+        setSpectatorViewSeatIndex(0);
+        setPrivateState(null);
+        setActions([]);
+        setRoom(snapshot);
+        replaceAppPath(buildSpectatorPath(roomCode));
+      } catch (caught) {
+        if (caught instanceof AuthExpiredError) {
+          setPendingSpectatorCode(roomCode);
+          handleAuthExpired();
+          return;
+        }
+        setError(caught instanceof Error ? caught.message : "觀戰房間失敗。");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [applyServerTime, handleAuthExpired, joinCode, runWithFreshSession, session]
+  );
+
+  useEffect(() => {
+    if (!session || room || !pendingSpectatorCode) return;
+
+    const roomCode = pendingSpectatorCode;
+    setPendingSpectatorCode(null);
+    void spectateRoom(roomCode);
+  }, [pendingSpectatorCode, room, session, spectateRoom]);
 
   const joinRoom = useCallback(async () => {
     if (!session || !joinCode.trim()) return;
@@ -356,39 +403,21 @@ export function App() {
       setPrivateState(null);
       setActions([]);
       setRoom(snapshot);
+      replaceAppPath("/");
     } catch (caught) {
       if (caught instanceof AuthExpiredError) {
         handleAuthExpired();
         return;
       }
       if (caught instanceof ApiError && caught.code === "ROOM_FULL") {
-        try {
-          const snapshot = await runWithFreshSession((activeSession) =>
-            api<RoomSnapshot>(`/api/rooms/${roomCode}`, activeSession.token, {
-              method: "GET"
-            })
-          );
-          applyServerTime(snapshot.serverTime);
-          setIsSpectator(true);
-          setSpectatorViewSeatIndex(0);
-          setPrivateState(null);
-          setActions([]);
-          setRoom(snapshot);
-          return;
-        } catch (fallbackError) {
-          if (fallbackError instanceof AuthExpiredError) {
-            handleAuthExpired();
-            return;
-          }
-          setError(fallbackError instanceof Error ? fallbackError.message : "觀戰房間失敗。");
-          return;
-        }
+        await spectateRoom(roomCode);
+        return;
       }
       setError(caught instanceof Error ? caught.message : "加入房間失敗。");
     } finally {
       setBusy(false);
     }
-  }, [applyServerTime, handleAuthExpired, joinCode, runWithFreshSession, session]);
+  }, [applyServerTime, handleAuthExpired, joinCode, runWithFreshSession, session, spectateRoom]);
 
   const saveProfileName = useCallback(
     async (event?: FormEvent) => {
@@ -478,6 +507,7 @@ export function App() {
     setSettlement(null);
     setIsSpectator(false);
     setSpectatorViewSeatIndex(0);
+    replaceAppPath("/");
   }, [socket]);
 
   const addBot = useCallback(
@@ -555,6 +585,11 @@ export function App() {
     await navigator.clipboard.writeText(room.code);
   }, [room]);
 
+  const copySpectatorLink = useCallback(async () => {
+    if (!room) return;
+    await navigator.clipboard.writeText(buildSpectatorUrl(window.location.origin, room.code));
+  }, [room]);
+
   const identityControl = session ? (
     renamingName ? (
       <form className="identity identityEditor" onSubmit={saveProfileName}>
@@ -624,6 +659,14 @@ export function App() {
             暱稱
             <input value={guestName} maxLength={20} onChange={(event) => setGuestName(event.target.value)} placeholder="輸入你的名字" />
           </label>
+          {pendingSpectatorCode && (
+            <div className="spectatorEntryHint">
+              <Eye size={18} />
+              <span>
+                登入後將進入房間 <strong>{pendingSpectatorCode}</strong> 觀戰
+              </span>
+            </div>
+          )}
           <button className="primaryButton" disabled={busy} onClick={authenticate}>
             {busy ? <Loader2 className="spin" size={18} /> : <Play size={18} />}
             進入遊戲
@@ -657,6 +700,10 @@ export function App() {
               <Send size={18} />
               加入
             </button>
+            <button className="secondaryButton spectatorEntryButton" disabled={busy || !joinCode.trim()} onClick={() => void spectateRoom()}>
+              <Eye size={18} />
+              觀戰
+            </button>
           </div>
         </section>
       )}
@@ -682,6 +729,9 @@ export function App() {
               </button>
               <button className="iconButton" onClick={copyCode} title="複製房號">
                 <Copy size={18} />
+              </button>
+              <button className="iconButton" onClick={copySpectatorLink} title="複製觀戰連結">
+                <Share2 size={18} />
               </button>
               <button className="iconButton danger" onClick={leaveRoom} title="離開房間">
                 <DoorOpen size={18} />
@@ -809,4 +859,9 @@ function stableIndex(value: string, size: number): number {
     hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
   }
   return hash % size;
+}
+
+function replaceAppPath(pathname: string): void {
+  if (window.location.pathname === pathname && !window.location.search && !window.location.hash) return;
+  window.history.replaceState(null, "", pathname);
 }
