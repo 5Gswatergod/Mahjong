@@ -1,3 +1,5 @@
+import { publicAssetUrl } from "./publicAssets.js";
+
 const musicBase = "/music";
 
 export interface MusicTrack {
@@ -7,7 +9,7 @@ export interface MusicTrack {
 
 function loopableTrack(path: string): MusicTrack {
   return {
-    path: `${musicBase}/${path}`,
+    path: publicAssetUrl(`${musicBase}/${path}`),
     loop: true
   };
 }

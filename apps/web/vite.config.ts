@@ -1,9 +1,16 @@
 import react from "@vitejs/plugin-react";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
+import { createPublicAssetVersions } from "./src/buildAssetVersions.js";
+
+const publicDir = fileURLToPath(new URL("../../assets", import.meta.url));
 
 export default defineConfig({
   plugins: [react()],
-  publicDir: "../../assets",
+  publicDir,
+  define: {
+    __PUBLIC_ASSET_VERSIONS__: JSON.stringify(createPublicAssetVersions(publicDir))
+  },
   server: {
     port: 5173,
     proxy: {

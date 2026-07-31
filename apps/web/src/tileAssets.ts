@@ -1,4 +1,5 @@
 import type { Dragon, Flower, Suit, Tile, Wind } from "@taiwan-mahjong/shared";
+import { publicAssetUrl } from "./publicAssets.js";
 
 const tileAssetBase = "/tiles";
 
@@ -9,31 +10,31 @@ const suitedAssetFolders: Record<Suit, string> = {
 };
 
 const windAssetPaths: Record<Wind, string> = {
-  east: `${tileAssetBase}/winds/east.svg`,
-  south: `${tileAssetBase}/winds/south.svg`,
-  west: `${tileAssetBase}/winds/west.svg`,
-  north: `${tileAssetBase}/winds/north.svg`
+  east: publicAssetUrl(`${tileAssetBase}/winds/east.svg`),
+  south: publicAssetUrl(`${tileAssetBase}/winds/south.svg`),
+  west: publicAssetUrl(`${tileAssetBase}/winds/west.svg`),
+  north: publicAssetUrl(`${tileAssetBase}/winds/north.svg`)
 };
 
 const dragonAssetPaths: Record<Dragon, string> = {
-  red: `${tileAssetBase}/dragons/red.svg`,
-  green: `${tileAssetBase}/dragons/green.svg`,
-  white: `${tileAssetBase}/dragons/white.svg`
+  red: publicAssetUrl(`${tileAssetBase}/dragons/red.svg`),
+  green: publicAssetUrl(`${tileAssetBase}/dragons/green.svg`),
+  white: publicAssetUrl(`${tileAssetBase}/dragons/white.svg`)
 };
 
 const flowerAssetPaths: Record<Flower, string> = {
-  spring: `${tileAssetBase}/flowers/spring.svg`,
-  summer: `${tileAssetBase}/flowers/summer.svg`,
-  autumn: `${tileAssetBase}/flowers/autumn.svg`,
-  winter: `${tileAssetBase}/flowers/winter.svg`,
-  plum: `${tileAssetBase}/flowers/plum.svg`,
-  orchid: `${tileAssetBase}/flowers/orchid.svg`,
-  chrysanthemum: `${tileAssetBase}/flowers/chrysanthemum.svg`,
-  bamboo: `${tileAssetBase}/flowers/bamboo.svg`
+  spring: publicAssetUrl(`${tileAssetBase}/flowers/spring.svg`),
+  summer: publicAssetUrl(`${tileAssetBase}/flowers/summer.svg`),
+  autumn: publicAssetUrl(`${tileAssetBase}/flowers/autumn.svg`),
+  winter: publicAssetUrl(`${tileAssetBase}/flowers/winter.svg`),
+  plum: publicAssetUrl(`${tileAssetBase}/flowers/plum.svg`),
+  orchid: publicAssetUrl(`${tileAssetBase}/flowers/orchid.svg`),
+  chrysanthemum: publicAssetUrl(`${tileAssetBase}/flowers/chrysanthemum.svg`),
+  bamboo: publicAssetUrl(`${tileAssetBase}/flowers/bamboo.svg`)
 };
 
 const suitedAssetPaths = Object.values(suitedAssetFolders).flatMap((folder) =>
-  Array.from({ length: 9 }, (_, index) => `${tileAssetBase}/${folder}/${index + 1}.svg`)
+  Array.from({ length: 9 }, (_, index) => publicAssetUrl(`${tileAssetBase}/${folder}/${index + 1}.svg`))
 );
 
 export const tileAssetPaths = [
@@ -45,7 +46,7 @@ export const tileAssetPaths = [
 
 export function tileImagePath(tile: Tile): string | undefined {
   if (tile.kind === "suited" && tile.suit && isRank(tile.rank)) {
-    return `${tileAssetBase}/${suitedAssetFolders[tile.suit]}/${tile.rank}.svg`;
+    return publicAssetUrl(`${tileAssetBase}/${suitedAssetFolders[tile.suit]}/${tile.rank}.svg`);
   }
 
   if (tile.wind) {

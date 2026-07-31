@@ -1,15 +1,11 @@
-import { musicAssetPaths } from "./musicAssets";
-import { tileAssetPaths } from "./tileAssets";
+import { gameTableBackgroundUrl } from "./publicAssets.js";
+import { tileAssetPaths } from "./tileAssets.js";
 
-const imageAssetPaths = ["/backgrounds/game-table-bg.png", ...tileAssetPaths];
-const audioAssetPaths = [...musicAssetPaths];
+export const criticalAssetPaths = [gameTableBackgroundUrl, ...tileAssetPaths];
+export const criticalAssetStorageKey = "taiwanMahjong.preloadedAssetVersion";
+export const criticalAssetFingerprint = fingerprintAssetPaths(criticalAssetPaths);
 
-type AssetKind = "image" | "audio";
-
-interface PreloadableAsset {
-  kind: AssetKind;
-  path: string;
-}
+const preloadConcurrency = 6;
 
 export interface AssetPreloadProgress {
   loaded: number;
@@ -22,6 +18,7 @@ export interface AssetPreloadResult {
 }
 
 type AssetPreloadListener = (progress: AssetPreloadProgress) => void;
+type AssetVersionStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
 interface AssetPreloadSession {
   listeners: Set<AssetPreloadListener>;
@@ -31,7 +28,7 @@ interface AssetPreloadSession {
 
 const initialProgress: AssetPreloadProgress = {
   loaded: 0,
-  total: 1,
+  total: criticalAssetPaths.length,
   currentPath: ""
 };
 
@@ -56,6 +53,92 @@ export async function preloadGameAssets(
   }
 }
 
+export function hasCompletedCriticalAssetPreload(storage: AssetVersionStorage | undefined = browserStorage()): boolean {
+  try {
+    return storage?.getItem(criticalAssetStorageKey) === criticalAssetFingerprint;
+  } catch {
+    return false;
+  }
+}
+
+export function rememberCompletedCriticalAssetPreload(storage: AssetVersionStorage | undefined = browserStorage()): void {
+  try {
+    storage?.setItem(criticalAssetStorageKey, criticalAssetFingerprint);
+  } catch {
+    // Storage can be unavailable in private or restricted browser contexts.
+  }
+}
+
+export function clearCompletedCriticalAssetPreload(storage: AssetVersionStorage | undefined = browserStorage()): void {
+  try {
+    storage?.removeItem(criticalAssetStorageKey);
+  } catch {
+    // A failed cache marker cleanup must not prevent the app from starting.
+  }
+}
+
+export function persistCriticalAssetPreloadResult(
+  result: AssetPreloadResult,
+  storage: AssetVersionStorage | undefined = browserStorage()
+): void {
+  if (result.failedPaths.length === 0) {
+    rememberCompletedCriticalAssetPreload(storage);
+  } else {
+    clearCompletedCriticalAssetPreload(storage);
+  }
+}
+
+export function fingerprintAssetPaths(paths: readonly string[]): string {
+  let hash = 0x811c9dc5;
+
+  for (const path of paths) {
+    for (let index = 0; index < path.length; index += 1) {
+      hash ^= path.charCodeAt(index);
+      hash = Math.imul(hash, 0x01000193);
+    }
+    hash ^= 0;
+    hash = Math.imul(hash, 0x01000193);
+  }
+
+  return `assets-v1-${(hash >>> 0).toString(16).padStart(8, "0")}`;
+}
+
+export async function loadAssetsConcurrently(
+  paths: readonly string[],
+  load: (path: string) => Promise<boolean>,
+  concurrency: number,
+  onProgress: AssetPreloadListener
+): Promise<AssetPreloadResult> {
+  const uniquePaths = [...new Set(paths)];
+  const failed = new Set<string>();
+  let nextIndex = 0;
+  let completed = 0;
+
+  onProgress({ loaded: 0, total: uniquePaths.length, currentPath: "" });
+
+  const worker = async () => {
+    while (nextIndex < uniquePaths.length) {
+      const assetPath = uniquePaths[nextIndex];
+      nextIndex += 1;
+      if (!assetPath) {
+        return;
+      }
+
+      const loaded = await load(assetPath);
+      if (!loaded) {
+        failed.add(assetPath);
+      }
+      completed += 1;
+      onProgress({ loaded: completed, total: uniquePaths.length, currentPath: assetPath });
+    }
+  };
+
+  const workerCount = Math.min(Math.max(1, Math.floor(concurrency)), uniquePaths.length);
+  await Promise.all(Array.from({ length: workerCount }, worker));
+
+  return { failedPaths: uniquePaths.filter((path) => failed.has(path)) };
+}
+
 function createPreloadSession(): AssetPreloadSession {
   const listeners = new Set<AssetPreloadListener>();
   const session: AssetPreloadSession = {
@@ -69,49 +152,20 @@ function createPreloadSession(): AssetPreloadSession {
     listeners.forEach((listener) => listener(progress));
   };
 
-  session.promise = preloadAssets(report);
+  session.promise = loadAssetsConcurrently(
+    criticalAssetPaths,
+    (path) => loadImageWithRetries(path, 2),
+    preloadConcurrency,
+    report
+  );
 
   return session;
 }
 
-async function preloadAssets(onProgress: AssetPreloadListener): Promise<AssetPreloadResult> {
-  const uniqueAssets = uniquePreloadableAssets([
-    ...imageAssetPaths.map((path) => ({ kind: "image" as const, path })),
-    ...audioAssetPaths.map((path) => ({ kind: "audio" as const, path }))
-  ]);
-  const failedPaths: string[] = [];
-
-  for (const [index, asset] of uniqueAssets.entries()) {
-    onProgress({ loaded: index, total: uniqueAssets.length, currentPath: asset.path });
-    const loaded = await loadAssetWithRetries(asset, 2);
-    if (!loaded) {
-      failedPaths.push(asset.path);
-    }
-    onProgress({ loaded: index + 1, total: uniqueAssets.length, currentPath: asset.path });
-  }
-
-  return { failedPaths };
-}
-
-function uniquePreloadableAssets(assets: PreloadableAsset[]): PreloadableAsset[] {
-  const seen = new Set<string>();
-  return assets.filter((asset) => {
-    if (seen.has(asset.path)) {
-      return false;
-    }
-    seen.add(asset.path);
-    return true;
-  });
-}
-
-async function loadAssetWithRetries(asset: PreloadableAsset, retries: number): Promise<boolean> {
+async function loadImageWithRetries(path: string, retries: number): Promise<boolean> {
   for (let attempt = 0; attempt <= retries; attempt += 1) {
     try {
-      if (asset.kind === "image") {
-        await loadImage(asset.path, 8_000);
-      } else {
-        await loadAudio(asset.path, 12_000);
-      }
+      await loadImage(path, 8_000);
       return true;
     } catch {
       if (attempt === retries) {
@@ -149,28 +203,6 @@ function loadImage(path: string, timeoutMs: number): Promise<void> {
   });
 }
 
-function loadAudio(path: string, timeoutMs: number): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => {
-      controller.abort();
-      reject(new Error(`Timed out loading ${path}`));
-    }, timeoutMs);
-
-    fetch(path, { cache: "force-cache", signal: controller.signal })
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(`Failed loading ${path}`);
-        }
-        return response.arrayBuffer();
-      })
-      .then(() => {
-        window.clearTimeout(timeout);
-        resolve();
-      })
-      .catch((error: unknown) => {
-        window.clearTimeout(timeout);
-        reject(error instanceof Error ? error : new Error(`Failed loading ${path}`));
-      });
-  });
+function browserStorage(): AssetVersionStorage | undefined {
+  return typeof window === "undefined" ? undefined : window.localStorage;
 }

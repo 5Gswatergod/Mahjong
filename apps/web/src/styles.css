@@ -1,4 +1,5 @@
 :root {
+  --game-table-background-image: none;
   color: #f7f1df;
   background: #090c16;
   font-family:
@@ -49,7 +50,7 @@ button:disabled {
   color: #f7f1df;
   background:
     linear-gradient(120deg, rgba(7, 10, 18, 0.9), rgba(24, 43, 55, 0.78)),
-    url("/backgrounds/game-table-bg.png") center / cover fixed;
+    var(--game-table-background-image) center / cover fixed;
 }
 
 .assetInitPanel {
@@ -184,7 +185,7 @@ button:disabled {
   place-items: center;
   background:
     linear-gradient(120deg, rgba(6, 9, 18, 0.82), rgba(20, 33, 48, 0.68)),
-    url("/backgrounds/game-table-bg.png") center / cover fixed;
+    var(--game-table-background-image) center / cover fixed;
 }
 
 .gameAppShell {
@@ -199,7 +200,7 @@ button:disabled {
   padding: 12px;
   background:
     linear-gradient(120deg, rgba(7, 10, 18, 0.9), rgba(12, 25, 38, 0.78)),
-    url("/backgrounds/game-table-bg.png") center / cover fixed;
+    var(--game-table-background-image) center / cover fixed;
 }
 
 .notice {
@@ -1188,7 +1189,7 @@ input {
   isolation: isolate;
   background:
     linear-gradient(180deg, rgba(7, 10, 18, 0.18), rgba(7, 10, 18, 0.3)),
-    url("/backgrounds/game-table-bg.png") center / cover;
+    var(--game-table-background-image) center / cover;
   border: 1px solid rgba(236, 204, 128, 0.24);
   border-radius: 8px;
   box-shadow:
@@ -1865,7 +1866,7 @@ input {
   background:
     radial-gradient(circle at 50% 48%, rgba(65, 128, 148, 0.22), transparent 28%),
     linear-gradient(112deg, rgba(8, 26, 45, 0.84), rgba(18, 55, 88, 0.76) 46%, rgba(8, 20, 34, 0.9)),
-    url("/backgrounds/game-table-bg.png") center / cover;
+    var(--game-table-background-image) center / cover;
 }
 
 .gameBoard::before {
@@ -2780,7 +2781,7 @@ input {
   gap: 16px;
   background:
     linear-gradient(180deg, rgba(8, 12, 20, 0.1), rgba(8, 12, 20, 0.9)),
-    url("/backgrounds/game-table-bg.png") left center / cover;
+    var(--game-table-background-image) left center / cover;
 }
 
 .winnerAvatar {

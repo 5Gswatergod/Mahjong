@@ -1,6 +1,11 @@
 import { Loader2, RefreshCw, X } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
-import { preloadGameAssets, type AssetPreloadProgress } from "../assetPreloader";
+import {
+  hasCompletedCriticalAssetPreload,
+  persistCriticalAssetPreloadResult,
+  preloadGameAssets,
+  type AssetPreloadProgress
+} from "../assetPreloader";
 import { BrandMark } from "./BrandMark";
 
 type AssetInitState =
@@ -14,7 +19,12 @@ const initialProgress: AssetPreloadProgress = {
 };
 
 export function AssetInitializer({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<AssetInitState>({ status: "loading", progress: initialProgress });
+  const [shouldBlockInitialLoad] = useState(() => !hasCompletedCriticalAssetPreload());
+  const [state, setState] = useState<AssetInitState>(() =>
+    shouldBlockInitialLoad
+      ? { status: "loading", progress: initialProgress }
+      : { status: "ready", failedCount: 0, retrying: false }
+  );
   const [reloadToken, setReloadToken] = useState(0);
   const [dismissedFailureCount, setDismissedFailureCount] = useState(0);
 
@@ -24,19 +34,25 @@ export function AssetInitializer({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
+    const isRetry = reloadToken > 0;
 
     void preloadGameAssets(
       (progress) => {
         if (!cancelled) {
           setState((current) =>
-            current.status === "ready" ? { ...current, retrying: true } : { status: "loading", progress }
+            current.status === "ready"
+              ? isRetry
+                ? { ...current, retrying: true }
+                : current
+              : { status: "loading", progress }
           );
         }
       },
-      { forceReload: reloadToken > 0 }
+      { forceReload: isRetry }
     ).then(({ failedPaths }) => {
       if (cancelled) return;
 
+      persistCriticalAssetPreloadResult({ failedPaths });
       setState({ status: "ready", failedCount: failedPaths.length, retrying: false });
       setDismissedFailureCount(0);
     });

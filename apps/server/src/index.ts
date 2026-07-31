@@ -54,6 +54,7 @@ import { ADMIN_COOKIE_NAME, AdminSessionManager, buildAdminDashboard, type Admin
 import { MemoryEventStore, PgEventStore, type EventStore, resolveDatabaseConnection } from "./event-store.js";
 import { resolveRoomEntryRole } from "./room-entry.js";
 import { applySeatDrawResult, createSeatDrawResult } from "./seat-draw.js";
+import { staticCacheControl } from "./static-cache.js";
 
 declare module "@taiwan-mahjong/shared" {
   interface SocketData {
@@ -365,7 +366,11 @@ fastify.get("/api/rooms/:code", async (request, reply) => {
 if (existsSync(path.join(staticDir, "index.html"))) {
   await fastify.register(fastifyStatic, {
     root: staticDir,
-    prefix: "/"
+    prefix: "/",
+    cacheControl: false,
+    setHeaders(response, filePath) {
+      response.setHeader("Cache-Control", staticCacheControl(filePath));
+    }
   });
 
   fastify.setNotFoundHandler((request, reply) => {

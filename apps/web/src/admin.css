@@ -21,7 +21,7 @@
   background:
     radial-gradient(circle at 75% 18%, rgba(208, 157, 61, 0.15), transparent 31%),
     linear-gradient(135deg, rgba(5, 35, 32, 0.98), rgba(5, 17, 24, 0.98)),
-    url("/backgrounds/game-table-bg.png") center / cover;
+    var(--game-table-background-image) center / cover;
 }
 
 .adminGateCard {
@@ -199,7 +199,7 @@
   color: #f2ead7;
   background:
     linear-gradient(180deg, rgba(8, 55, 50, 0.97), rgba(4, 35, 34, 0.99)),
-    url("/backgrounds/game-table-bg.png") center / cover;
+    var(--game-table-background-image) center / cover;
   border-right: 1px solid rgba(209, 173, 96, 0.3);
 }
 
