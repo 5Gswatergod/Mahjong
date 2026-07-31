@@ -275,6 +275,13 @@ export interface RoomSnapshot {
   updatedAt: number;
 }
 
+export type RoomEntryRole = "player" | "spectator";
+
+export interface RoomEntryResponse {
+  role: RoomEntryRole;
+  room: RoomSnapshot;
+}
+
 export interface GuestAuthResponse {
   playerId: string;
   name: string;
@@ -370,6 +377,7 @@ export type ClientToServerEvents = {
 
 export type ServerToClientEvents = {
   "room.snapshot": (snapshot: RoomSnapshot) => void;
+  "room.closed": (payload: { message: string }) => void;
   "game.publicState": (state: GameState) => void;
   "game.privateState": (state: PrivatePlayerState) => void;
   "game.actionRequired": (actions: LegalAction[]) => void;

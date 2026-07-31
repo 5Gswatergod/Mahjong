@@ -34,6 +34,7 @@ import {
   type GameMode,
   type LegalAction,
   type PlayerSeat,
+  type RoomEntryResponse,
   type RoomSnapshot,
   type SeatDrawResult,
   type ServerToClientEvents,
@@ -51,6 +52,7 @@ import {
 } from "./bot-policy.js";
 import { ADMIN_COOKIE_NAME, AdminSessionManager, buildAdminDashboard, type AdminRoomSource } from "./admin.js";
 import { MemoryEventStore, PgEventStore, type EventStore, resolveDatabaseConnection } from "./event-store.js";
+import { resolveRoomEntryRole } from "./room-entry.js";
 import { applySeatDrawResult, createSeatDrawResult } from "./seat-draw.js";
 
 declare module "@taiwan-mahjong/shared" {
@@ -321,6 +323,34 @@ fastify.post("/api/rooms/:code/join", async (request, reply) => {
   await persist(room.code, "room.joined", { playerId: session.playerId });
   broadcastRoom(room);
   return snapshotRoom(room);
+});
+
+fastify.post("/api/rooms/:code/enter", async (request, reply) => {
+  const session = authenticateRequest(request.headers.authorization);
+  if (!session) {
+    return reply.code(401).send({ message: "Missing or invalid guest token." });
+  }
+  const params = z.object({ code: z.string().trim().min(4).max(8) }).parse(request.params);
+  const room = rooms.get(params.code.toUpperCase());
+  if (!room) {
+    return reply.code(404).send({ message: "Room not found." });
+  }
+
+  const role = resolveRoomEntryRole(
+    { seats: room.seats, seatDrawActive: Boolean(room.seatDraw) },
+    session.playerId
+  );
+  if (role === "player") {
+    const alreadySeated = room.seats.some((seat) => seat.playerId === session.playerId);
+    joinRoom(room, session);
+    if (!alreadySeated) {
+      await persist(room.code, "room.joined", { playerId: session.playerId, source: "roomLink" });
+      broadcastRoom(room);
+    }
+  }
+
+  const response: RoomEntryResponse = { role, room: snapshotRoom(room) };
+  return response;
 });
 
 fastify.get("/api/rooms/:code", async (request, reply) => {
@@ -1110,7 +1140,7 @@ function disconnectRoomClients(roomCode: string, reason: string | undefined): vo
     if (socket.data.roomCode !== roomCode) {
       continue;
     }
-    socket.emit("game.error", { message });
+    socket.emit("room.closed", { message });
     socket.disconnect(true);
   }
 }

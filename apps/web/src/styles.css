@@ -242,6 +242,143 @@ button:disabled {
   border-radius: 8px;
 }
 
+.roomExitNoticeBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  padding: 20px;
+  display: grid;
+  place-items: center;
+  background: rgba(3, 8, 13, 0.7);
+  backdrop-filter: blur(8px);
+}
+
+.roomExitNoticePanel {
+  position: relative;
+  width: min(500px, 100%);
+  padding: 24px 22px 27px;
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) 34px;
+  align-items: start;
+  gap: 15px;
+  overflow: hidden;
+  color: #17211e;
+  background: #fffaf0;
+  border: 1px solid rgba(232, 194, 111, 0.78);
+  border-radius: 12px;
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.52);
+  animation: roomExitNoticeIn 0.18s ease-out;
+}
+
+.roomExitNoticeIcon {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  color: #fff8e8;
+  background: linear-gradient(180deg, #b04b40, #8f342e);
+  border-radius: 10px;
+  box-shadow: 0 4px 0 #672722;
+}
+
+.roomExitNoticeCopy {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.roomExitNoticeCopy h2,
+.roomExitNoticeCopy p {
+  margin: 0;
+}
+
+.roomExitNoticeCopy h2 {
+  color: #85372f;
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.roomExitNoticeCopy p {
+  color: #38433f;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.roomExitNoticeCopy span {
+  color: #777a73;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.roomExitNoticePanel > button {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  color: #6e716b;
+  background: #eee7da;
+  border: 0;
+  border-radius: 8px;
+}
+
+.roomExitNoticePanel > button:hover {
+  color: #8f342e;
+  background: #f3ddd7;
+}
+
+.roomExitNoticePanel > button:focus-visible {
+  outline: 3px solid rgba(176, 75, 64, 0.25);
+  outline-offset: 2px;
+}
+
+.roomExitNoticeProgress {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #af493f, #d49d3f);
+  transform-origin: left center;
+  animation: roomExitNoticeCountdown 3s linear forwards;
+}
+
+@keyframes roomExitNoticeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes roomExitNoticeCountdown {
+  to {
+    transform: scaleX(0);
+  }
+}
+
+@media (max-width: 520px) {
+  .roomExitNoticePanel {
+    padding: 20px 18px 24px;
+    grid-template-columns: 44px minmax(0, 1fr) 32px;
+    gap: 11px;
+  }
+
+  .roomExitNoticeIcon {
+    width: 44px;
+    height: 44px;
+  }
+
+  .roomExitNoticeCopy h2 {
+    font-size: 19px;
+  }
+}
+
 .audioBackdrop {
   position: fixed;
   inset: 0;

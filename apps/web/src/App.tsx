@@ -1,5 +1,5 @@
-import { BookOpen, Copy, DoorOpen, Eye, Loader2, Pencil, Play, Save, Send, Share2, Shuffle, WifiOff, X } from "lucide-react";
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { BookOpen, DoorClosed, DoorOpen, Eye, Loader2, Pencil, Play, Save, Send, Share2, Shuffle, WifiOff, X } from "lucide-react";
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 import {
   type ClientToServerEvents,
@@ -9,6 +9,7 @@ import {
   type GuestAuthResponse,
   type LegalAction,
   type PrivatePlayerState,
+  type RoomEntryResponse,
   type RoomSnapshot,
   type ScoringResult,
   type ServerToClientEvents,
@@ -23,7 +24,7 @@ import { RoomLobby } from "./components/RoomLobby";
 import { defaultRoomConfig, RoomSettingsPanel } from "./components/RoomSettingsPanel";
 import { SettlementOverlay } from "./components/SettlementOverlay";
 import { TableScreen } from "./components/TableScreen";
-import { ApiError, AuthExpiredError, api, clearSession, readSession, requestGuestSession, saveSession, updateGuestSessionName } from "./api";
+import { AuthExpiredError, api, clearSession, readSession, requestGuestSession, saveSession, updateGuestSessionName } from "./api";
 import { modeLabels, windFullLabels, windLabels } from "./constants";
 import {
   drawMusicTracks,
@@ -37,16 +38,22 @@ import {
 } from "./musicAssets";
 import { buildActionHintIds } from "./utils/actions";
 import { phaseLabel } from "./utils/labels";
-import { buildSpectatorPath, buildSpectatorUrl, readSpectatorRoomCode } from "./spectatorUrl";
+import { buildRoomPath, buildRoomUrl, buildSpectatorPath, readRoomEntryTarget, type RoomEntryTarget } from "./spectatorUrl";
 
 type MahjongSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
+const NOTICE_DURATION_MS = 3_000;
 
+interface RoomExitNotice {
+  title: string;
+  message: string;
+}
 
 export function App() {
   const [session, setSession] = useState<GuestAuthResponse | null>(() => readSession());
   const [guestName, setGuestName] = useState("");
-  const [joinCode, setJoinCode] = useState(() => readSpectatorRoomCode(window.location.pathname) ?? "");
-  const [pendingSpectatorCode, setPendingSpectatorCode] = useState(() => readSpectatorRoomCode(window.location.pathname));
+  const [initialRoomEntry] = useState(() => readRoomEntryTarget(window.location.pathname));
+  const [joinCode, setJoinCode] = useState(() => initialRoomEntry?.roomCode ?? "");
+  const [pendingRoomEntry, setPendingRoomEntry] = useState<RoomEntryTarget | null>(initialRoomEntry);
   const [profileNameDraft, setProfileNameDraft] = useState("");
   const [selectedMode, setSelectedMode] = useState<GameMode>("taiwan");
   const [roomConfig, setRoomConfig] = useState<GameConfig>(() => defaultRoomConfig("taiwan"));
@@ -70,6 +77,8 @@ export function App() {
   const [clockOffsetMs, setClockOffsetMs] = useState(0);
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
   const [musicVolume, setMusicVolume] = useState(readStoredMusicVolume);
+  const [roomExitNotice, setRoomExitNotice] = useState<RoomExitNotice | null>(null);
+  const automaticRoomEntryInFlight = useRef(false);
 
   const mySeat = useMemo(() => {
     if (!room || !session) return undefined;
@@ -162,6 +171,18 @@ export function App() {
   }, [renamingName, session]);
 
   useEffect(() => {
+    if (!error) return;
+    const timer = window.setTimeout(() => setError(""), NOTICE_DURATION_MS);
+    return () => window.clearTimeout(timer);
+  }, [error]);
+
+  useEffect(() => {
+    if (!roomExitNotice) return;
+    const timer = window.setTimeout(() => setRoomExitNotice(null), NOTICE_DURATION_MS);
+    return () => window.clearTimeout(timer);
+  }, [roomExitNotice]);
+
+  useEffect(() => {
     const timer = window.setInterval(() => setClockMs(Date.now()), 250);
     return () => window.clearInterval(timer);
   }, []);
@@ -203,6 +224,22 @@ export function App() {
     return payload;
   }, []);
 
+  const clearRoomState = useCallback(() => {
+    setRoom(null);
+    setGame(null);
+    setPrivateState(null);
+    setActions([]);
+    setSettlement(null);
+    setIsSpectator(false);
+    setSpectatorViewSeatIndex(0);
+    setSelectedTileId(null);
+    setDismissedSettlementHandId(null);
+    setShowPatternCatalog(false);
+    setShowAudioSettings(false);
+    setPendingRoomEntry(null);
+    replaceAppPath("/");
+  }, []);
+
   const handleAuthExpired = useCallback(
     (message = "登入已過期，請重新進入。") => {
       clearSession();
@@ -213,7 +250,11 @@ export function App() {
       setPrivateState(null);
       setActions([]);
       setSettlement(null);
-      setPendingSpectatorCode((current) => current ?? (isSpectator ? room?.code ?? null : null));
+      setPendingRoomEntry((current) => {
+        if (current || !room) return current;
+        const currentPathIntent = readRoomEntryTarget(window.location.pathname)?.intent;
+        return { roomCode: room.code, intent: currentPathIntent ?? (isSpectator ? "spectator" : "auto") };
+      });
       setIsSpectator(false);
       setSocket((current) => {
         current?.disconnect();
@@ -256,12 +297,19 @@ export function App() {
         spectator: isSpectator
       }
     });
+    let forcedExitHandled = false;
 
     nextSocket.on("room.snapshot", (snapshot) => {
       applyServerTime(snapshot.serverTime);
       setRoom(snapshot);
       setGame(snapshot.game ?? null);
       setSettlement(snapshot.game?.settlement ?? null);
+    });
+    nextSocket.on("room.closed", (payload) => {
+      forcedExitHandled = true;
+      clearRoomState();
+      setJoinCode("");
+      setRoomExitNotice({ title: "房間已關閉", message: payload.message });
     });
     nextSocket.on("game.publicState", (state) => {
       applyServerTime(state.serverTime);
@@ -287,6 +335,12 @@ export function App() {
     });
     nextSocket.on("game.settlement", setSettlement);
     nextSocket.on("game.error", (payload) => setError(payload.message));
+    nextSocket.on("disconnect", (reason) => {
+      if (reason !== "io server disconnect" || forcedExitHandled) return;
+      clearRoomState();
+      setJoinCode("");
+      setRoomExitNotice({ title: "已離開房間", message: "房間連線已由伺服器中止，您已安全返回大廳。" });
+    });
     nextSocket.on("connect_error", (socketError) => {
       if (socketError.message.toLowerCase().includes("auth")) {
         handleAuthExpired();
@@ -299,7 +353,7 @@ export function App() {
     return () => {
       nextSocket.disconnect();
     };
-  }, [applyServerTime, handleAuthExpired, isSpectator, room?.code, session?.token]);
+  }, [applyServerTime, clearRoomState, handleAuthExpired, isSpectator, room?.code, session?.token]);
 
   const authenticate = useCallback(async () => {
     setBusy(true);
@@ -366,7 +420,7 @@ export function App() {
         replaceAppPath(buildSpectatorPath(roomCode));
       } catch (caught) {
         if (caught instanceof AuthExpiredError) {
-          setPendingSpectatorCode(roomCode);
+          setPendingRoomEntry({ roomCode, intent: "spectator" });
           handleAuthExpired();
           return;
         }
@@ -378,46 +432,64 @@ export function App() {
     [applyServerTime, handleAuthExpired, joinCode, runWithFreshSession, session]
   );
 
-  useEffect(() => {
-    if (!session || room || !pendingSpectatorCode) return;
+  const enterRoom = useCallback(
+    async (requestedCode?: string) => {
+      const roomCode = (requestedCode ?? joinCode).trim().toUpperCase();
+      if (!session || !roomCode) return;
 
-    const roomCode = pendingSpectatorCode;
-    setPendingSpectatorCode(null);
-    void spectateRoom(roomCode);
-  }, [pendingSpectatorCode, room, session, spectateRoom]);
+      setBusy(true);
+      setError("");
+      try {
+        const response = await runWithFreshSession((activeSession) =>
+          api<RoomEntryResponse>(`/api/rooms/${roomCode}/enter`, activeSession.token, {
+            method: "POST"
+          })
+        );
+        applyServerTime(response.room.serverTime);
+        setJoinCode(roomCode);
+        setIsSpectator(response.role === "spectator");
+        setSpectatorViewSeatIndex(0);
+        setPrivateState(null);
+        setActions([]);
+        setRoom(response.room);
+        setPendingRoomEntry(null);
+        replaceAppPath(buildRoomPath(roomCode));
+      } catch (caught) {
+        if (caught instanceof AuthExpiredError) {
+          setPendingRoomEntry({ roomCode, intent: "auto" });
+          handleAuthExpired();
+          return;
+        }
+        setError(caught instanceof Error ? caught.message : "進入房間失敗。");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [applyServerTime, handleAuthExpired, joinCode, runWithFreshSession, session]
+  );
+
+  useEffect(() => {
+    if (!session || room || !pendingRoomEntry || automaticRoomEntryInFlight.current) return;
+
+    const entry = pendingRoomEntry;
+    automaticRoomEntryInFlight.current = true;
+    setPendingRoomEntry(null);
+    void (async () => {
+      try {
+        if (entry.intent === "spectator") {
+          await spectateRoom(entry.roomCode);
+          return;
+        }
+        await enterRoom(entry.roomCode);
+      } finally {
+        automaticRoomEntryInFlight.current = false;
+      }
+    })();
+  }, [enterRoom, pendingRoomEntry, room, session, spectateRoom]);
 
   const joinRoom = useCallback(async () => {
-    if (!session || !joinCode.trim()) return;
-    setBusy(true);
-    setError("");
-    const roomCode = joinCode.trim().toUpperCase();
-    try {
-      const snapshot = await runWithFreshSession((activeSession) =>
-        api<RoomSnapshot>(`/api/rooms/${roomCode}/join`, activeSession.token, {
-          method: "POST"
-        })
-      );
-      applyServerTime(snapshot.serverTime);
-      setIsSpectator(false);
-      setSpectatorViewSeatIndex(0);
-      setPrivateState(null);
-      setActions([]);
-      setRoom(snapshot);
-      replaceAppPath("/");
-    } catch (caught) {
-      if (caught instanceof AuthExpiredError) {
-        handleAuthExpired();
-        return;
-      }
-      if (caught instanceof ApiError && caught.code === "ROOM_FULL") {
-        await spectateRoom(roomCode);
-        return;
-      }
-      setError(caught instanceof Error ? caught.message : "加入房間失敗。");
-    } finally {
-      setBusy(false);
-    }
-  }, [applyServerTime, handleAuthExpired, joinCode, runWithFreshSession, session, spectateRoom]);
+    await enterRoom();
+  }, [enterRoom]);
 
   const saveProfileName = useCallback(
     async (event?: FormEvent) => {
@@ -500,15 +572,8 @@ export function App() {
   const leaveRoom = useCallback(() => {
     socket?.emit("room.leave");
     socket?.disconnect();
-    setRoom(null);
-    setGame(null);
-    setPrivateState(null);
-    setActions([]);
-    setSettlement(null);
-    setIsSpectator(false);
-    setSpectatorViewSeatIndex(0);
-    replaceAppPath("/");
-  }, [socket]);
+    clearRoomState();
+  }, [clearRoomState, socket]);
 
   const addBot = useCallback(
     async (seatIndex: number) => {
@@ -580,14 +645,9 @@ export function App() {
     [socket]
   );
 
-  const copyCode = useCallback(async () => {
+  const copyRoomLink = useCallback(async () => {
     if (!room) return;
-    await navigator.clipboard.writeText(room.code);
-  }, [room]);
-
-  const copySpectatorLink = useCallback(async () => {
-    if (!room) return;
-    await navigator.clipboard.writeText(buildSpectatorUrl(window.location.origin, room.code));
+    await navigator.clipboard.writeText(buildRoomUrl(window.location.origin, room.code));
   }, [room]);
 
   const identityControl = session ? (
@@ -659,11 +719,12 @@ export function App() {
             暱稱
             <input value={guestName} maxLength={20} onChange={(event) => setGuestName(event.target.value)} placeholder="輸入你的名字" />
           </label>
-          {pendingSpectatorCode && (
+          {pendingRoomEntry && (
             <div className="spectatorEntryHint">
-              <Eye size={18} />
+              {pendingRoomEntry.intent === "auto" ? <Share2 size={18} /> : <Eye size={18} />}
               <span>
-                登入後將進入房間 <strong>{pendingSpectatorCode}</strong> 觀戰
+                登入後將進入房間 <strong>{pendingRoomEntry.roomCode}</strong>
+                {pendingRoomEntry.intent === "auto" ? "，有空位時加入遊戲，客滿時自動觀戰" : " 觀戰"}
               </span>
             </div>
           )}
@@ -727,10 +788,7 @@ export function App() {
               <button className="iconButton" onClick={() => setShowPatternCatalog(true)} title="牌型目錄">
                 <BookOpen size={18} />
               </button>
-              <button className="iconButton" onClick={copyCode} title="複製房號">
-                <Copy size={18} />
-              </button>
-              <button className="iconButton" onClick={copySpectatorLink} title="複製觀戰連結">
+              <button className="iconButton" onClick={copyRoomLink} title="複製房間連結">
                 <Share2 size={18} />
               </button>
               <button className="iconButton danger" onClick={leaveRoom} title="離開房間">
@@ -807,6 +865,25 @@ export function App() {
             <AudioSettings volume={musicVolume} onVolumeChange={setMusicVolume} onClose={() => setShowAudioSettings(false)} />
           )}
         </section>
+      )}
+
+      {roomExitNotice && (
+        <div className="roomExitNoticeBackdrop">
+          <section className="roomExitNoticePanel" role="alertdialog" aria-modal="true" aria-labelledby="room-exit-notice-title">
+            <div className="roomExitNoticeIcon">
+              <DoorClosed size={28} />
+            </div>
+            <div className="roomExitNoticeCopy">
+              <h2 id="room-exit-notice-title">{roomExitNotice.title}</h2>
+              <p>{roomExitNotice.message}</p>
+              <span>您已離開房間，此訊息將在 3 秒後關閉。</span>
+            </div>
+            <button type="button" onClick={() => setRoomExitNotice(null)} title="關閉提示" aria-label="關閉提示">
+              <X size={18} />
+            </button>
+            <div className="roomExitNoticeProgress" aria-hidden="true" />
+          </section>
+        </div>
       )}
     </main>
   );
