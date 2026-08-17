@@ -188,6 +188,83 @@ button:disabled {
     var(--game-table-background-image) center / cover fixed;
 }
 
+.landingContent {
+  width: min(1080px, 100%);
+  display: grid;
+  grid-template-columns: minmax(0, 620px) minmax(300px, 1fr);
+  align-items: start;
+  gap: 18px;
+}
+
+.seoOverview {
+  padding: 20px;
+  display: grid;
+  gap: 18px;
+  color: #f7f1df;
+  background: rgba(7, 17, 27, 0.84);
+  border: 1px solid rgba(244, 216, 135, 0.28);
+  border-radius: 8px;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(12px);
+}
+
+.seoOverviewIntro {
+  display: grid;
+  gap: 7px;
+}
+
+.seoOverviewIntro span {
+  color: #f4d887;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.seoOverview h2,
+.seoOverview p,
+.seoOverview dl,
+.seoOverview dt,
+.seoOverview dd {
+  margin: 0;
+}
+
+.seoOverview h2 {
+  font-size: 23px;
+  line-height: 1.25;
+}
+
+.seoOverview p,
+.seoOverview dd {
+  color: #c9d1d7;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.seoFaq {
+  display: grid;
+  gap: 12px;
+}
+
+.seoFaq > div {
+  padding-top: 12px;
+  display: grid;
+  gap: 4px;
+  border-top: 1px solid rgba(255, 232, 178, 0.14);
+}
+
+.seoFaq dt {
+  color: #fff7df;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+@media (max-width: 900px) {
+  .landingContent {
+    width: min(620px, 100%);
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .gameAppShell {
   padding: 12px;
   background:

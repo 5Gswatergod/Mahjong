@@ -13,3 +13,7 @@ export function staticCacheControl(filePath: string): string {
 
   return revalidatedAssetCacheControl;
 }
+
+export function shouldIndexHtmlPath(requestPath: string): boolean {
+  return requestPath === "/" || requestPath === "/index.html";
+}

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   immutableAssetCacheControl,
   revalidatedAssetCacheControl,
+  shouldIndexHtmlPath,
   staticCacheControl
 } from "../src/static-cache.js";
 
@@ -23,4 +24,15 @@ describe("static cache headers", () => {
   ])("requires revalidation for entry points and unversioned files: %s", (filePath) => {
     expect(staticCacheControl(filePath)).toBe(revalidatedAssetCacheControl);
   });
+
+  it.each(["/", "/index.html"])("allows only the public landing page to be indexed: %s", (requestPath) => {
+    expect(shouldIndexHtmlPath(requestPath)).toBe(true);
+  });
+
+  it.each(["/admin", "/admin/rooms", "/room/ABCD", "/spectate/ABCD", "/missing"])(
+    "keeps private, temporary, and unknown HTML routes out of search: %s",
+    (requestPath) => {
+      expect(shouldIndexHtmlPath(requestPath)).toBe(false);
+    }
+  );
 });

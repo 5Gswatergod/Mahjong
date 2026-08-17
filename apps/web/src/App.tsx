@@ -39,6 +39,7 @@ import {
 import { buildActionHintIds } from "./utils/actions";
 import { phaseLabel } from "./utils/labels";
 import { buildRoomPath, buildRoomUrl, buildSpectatorPath, readRoomEntryTarget, type RoomEntryTarget } from "./spectatorUrl";
+import { applyDocumentSeo } from "./seo";
 
 type MahjongSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 const NOTICE_DURATION_MS = 3_000;
@@ -707,32 +708,36 @@ export function App() {
       )}
 
       {!session && (
-        <section className="entryPanel">
-          <div className="entryHero">
-            <BrandMark />
-            <div>
-              <h1>雀局</h1>
-              <p>開房、補 AI、即時對局與結算。</p>
+        <div className="landingContent">
+          <section className="entryPanel">
+            <div className="entryHero">
+              <BrandMark />
+              <div>
+                <h1>雀局</h1>
+                <p>免費線上台灣 16 張與日式立直麻將。</p>
+              </div>
             </div>
-          </div>
-          <label>
-            暱稱
-            <input value={guestName} maxLength={20} onChange={(event) => setGuestName(event.target.value)} placeholder="輸入你的名字" />
-          </label>
-          {pendingRoomEntry && (
-            <div className="spectatorEntryHint">
-              {pendingRoomEntry.intent === "auto" ? <Share2 size={18} /> : <Eye size={18} />}
-              <span>
-                登入後將進入房間 <strong>{pendingRoomEntry.roomCode}</strong>
-                {pendingRoomEntry.intent === "auto" ? "，有空位時加入遊戲，客滿時自動觀戰" : " 觀戰"}
-              </span>
-            </div>
-          )}
-          <button className="primaryButton" disabled={busy} onClick={authenticate}>
-            {busy ? <Loader2 className="spin" size={18} /> : <Play size={18} />}
-            進入遊戲
-          </button>
-        </section>
+            <label>
+              暱稱
+              <input value={guestName} maxLength={20} onChange={(event) => setGuestName(event.target.value)} placeholder="輸入你的名字" />
+            </label>
+            {pendingRoomEntry && (
+              <div className="spectatorEntryHint">
+                {pendingRoomEntry.intent === "auto" ? <Share2 size={18} /> : <Eye size={18} />}
+                <span>
+                  登入後將進入房間 <strong>{pendingRoomEntry.roomCode}</strong>
+                  {pendingRoomEntry.intent === "auto" ? "，有空位時加入遊戲，客滿時自動觀戰" : " 觀戰"}
+                </span>
+              </div>
+            )}
+            <button className="primaryButton" disabled={busy} onClick={authenticate}>
+              {busy ? <Loader2 className="spin" size={18} /> : <Play size={18} />}
+              進入遊戲
+            </button>
+          </section>
+
+          <SeoOverview />
+        </div>
       )}
 
       {session && !room && (
@@ -889,6 +894,37 @@ export function App() {
   );
 }
 
+function SeoOverview() {
+  return (
+    <article className="seoOverview" aria-labelledby="seo-overview-title">
+      <div className="seoOverviewIntro">
+        <span>免安裝・瀏覽器直接玩</span>
+        <h2 id="seo-overview-title">線上麻將，開房就能開始</h2>
+        <p>選擇台灣 16 張或日式立直玩法，邀請好友加入；人數不足時也能補 AI 玩家完成牌桌。</p>
+      </div>
+
+      <dl className="seoFaq">
+        <div>
+          <dt>雀局支援哪些麻將規則？</dt>
+          <dd>支援台灣 16 張麻將與日式立直麻將，建立房間時即可選擇玩法與對局設定。</dd>
+        </div>
+        <div>
+          <dt>需要下載或安裝嗎？</dt>
+          <dd>不需要。使用現代瀏覽器開啟雀局，輸入暱稱後即可建立房間或輸入房號加入。</dd>
+        </div>
+        <div>
+          <dt>人數不足可以加入 AI 玩家嗎？</dt>
+          <dd>可以。房主能在空位加入 AI 玩家，適合單人練習或好友人數不足時補滿牌桌。</dd>
+        </div>
+        <div>
+          <dt>可以分享房間或只觀戰嗎？</dt>
+          <dd>可以。建立房間後能複製邀請連結；房間客滿時會自動觀戰，也能從觀戰入口只看公開資訊。</dd>
+        </div>
+      </dl>
+    </article>
+  );
+}
+
 function SpectatorControls({
   game,
   viewSeatIndex,
@@ -941,4 +977,5 @@ function stableIndex(value: string, size: number): number {
 function replaceAppPath(pathname: string): void {
   if (window.location.pathname === pathname && !window.location.search && !window.location.hash) return;
   window.history.replaceState(null, "", pathname);
+  applyDocumentSeo(pathname);
 }

@@ -54,7 +54,7 @@ import { ADMIN_COOKIE_NAME, AdminSessionManager, buildAdminDashboard, type Admin
 import { MemoryEventStore, PgEventStore, type EventStore, resolveDatabaseConnection } from "./event-store.js";
 import { resolveRoomEntryRole } from "./room-entry.js";
 import { applySeatDrawResult, createSeatDrawResult } from "./seat-draw.js";
-import { staticCacheControl } from "./static-cache.js";
+import { shouldIndexHtmlPath, staticCacheControl } from "./static-cache.js";
 
 declare module "@taiwan-mahjong/shared" {
   interface SocketData {
@@ -380,6 +380,9 @@ if (existsSync(path.join(staticDir, "index.html"))) {
     }
 
     if (request.headers.accept?.includes("text/html")) {
+      if (!shouldIndexHtmlPath(requestPath)) {
+        reply.header("X-Robots-Tag", "noindex, nofollow");
+      }
       return reply.sendFile("index.html");
     }
 
