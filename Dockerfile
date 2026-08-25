@@ -22,7 +22,18 @@ COPY assets assets
 RUN npm run typecheck
 RUN npm run test
 RUN npm run build
-RUN npm prune --omit=dev
+
+FROM node:22-bookworm-slim AS prod-deps
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+COPY apps/server/package.json apps/server/package.json
+COPY apps/web/package.json apps/web/package.json
+COPY packages/game-core/package.json packages/game-core/package.json
+COPY packages/shared/package.json packages/shared/package.json
+
+RUN npm ci --omit=dev --workspace apps/server --include-workspace-root=false \
+  && npm cache clean --force
 
 FROM node:22-bookworm-slim AS runner
 WORKDIR /app
@@ -32,10 +43,15 @@ ENV PORT=4000
 ENV STATIC_DIR=/app/apps/web/dist
 
 RUN groupadd --system nodejs \
-  && useradd --system --gid nodejs --home-dir /app appuser
+  && useradd --system --gid nodejs --home-dir /app appuser \
+  && rm -rf /usr/local/lib/node_modules/npm \
+    /usr/local/lib/node_modules/corepack \
+    /opt/yarn-v* \
+  && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
+    /usr/local/bin/yarn /usr/local/bin/yarnpkg
 
-COPY --from=build --chown=appuser:nodejs /app/package.json /app/package-lock.json ./
-COPY --from=build --chown=appuser:nodejs /app/node_modules node_modules
+COPY --from=prod-deps --chown=appuser:nodejs /app/node_modules node_modules
+COPY --from=prod-deps --chown=appuser:nodejs /app/apps/server/node_modules apps/server/node_modules
 COPY --from=build --chown=appuser:nodejs /app/apps/server/package.json apps/server/package.json
 COPY --from=build --chown=appuser:nodejs /app/apps/server/dist apps/server/dist
 COPY --from=build --chown=appuser:nodejs /app/apps/web/dist apps/web/dist
