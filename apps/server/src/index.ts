@@ -369,7 +369,7 @@ if (existsSync(path.join(staticDir, "index.html"))) {
     prefix: "/",
     cacheControl: false,
     setHeaders(response, filePath) {
-      response.setHeader("Cache-Control", staticCacheControl(filePath));
+      response.header("Cache-Control", staticCacheControl(filePath));
     }
   });
 
